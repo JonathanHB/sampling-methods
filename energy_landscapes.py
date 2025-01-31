@@ -1,3 +1,5 @@
+import numpy as np
+import matplotlib.pyplot as plt
 
 class unit_double_well():
     
@@ -13,3 +15,12 @@ class unit_double_well():
 
     def diffusion_coefficient(self):
         return 1
+
+    def macro_class(self, x, e):
+        thr = 1/np.sqrt(2)
+        if x < -thr:
+            return 0
+        elif x > thr:
+            return 1
+        else:
+            return e

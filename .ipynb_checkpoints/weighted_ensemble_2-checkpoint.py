@@ -124,26 +124,45 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
                 #select walkers to duplicate
                 w_indset = [w_init[i] if w_init[i] != 0 else sys.float_info.min for i in indset]
 
-                duplicated_walkers = random.choices(indset, weights=w_indset, k = walkers_per_bin-len(indset))
+                #duplicated_walkers = random.choices(indset, weights=w_indset, k = walkers_per_bin-len(indset))
+
+                #always split the heaviest walker
+                walker_to_split = np.argmax(w_indset)
                 
                 #add coordinates and weights of walkers from this bin to the list for next round
                 # coordinates are unchanged for duplicated walkers; weights are reduced
                 for i in indset:
-                    #add multiple copies of walkers to be duplicated with proportionally smaller weights
-                    for j in range(1+duplicated_walkers.count(i)):
+                    x_md.append(x_init[i])
+                    e_md.append(e_init[i])                    
+
+                    if i == walker_to_split and max(w_indset) >= 0.002:
+                        #add halved weight for first child
+                        w_md.append(w_init[i]/2)
+
+                        #add second child walker
                         x_md.append(x_init[i])
                         e_md.append(e_init[i])
+                        w_md.append(w_init[i]/2)
 
-                        if w_init[i] >= 0.002:
-                            #this is the normal WE algorithm
-                            w_md.append(max(w_init[i]/(1+duplicated_walkers.count(i)), sys.float_info.min))
-                        else:
-                            w_md.append(w_init[i])
-                            break #do not duplicate too-light walkers
+                    else:
+                        w_md.append(w_init[i])
+            
+                    # #add multiple copies of walkers to be duplicated with proportionally smaller weights
+                    # for j in range(1+duplicated_walkers.count(i)):
+                    #     x_md.append(x_init[i])
+                    #     e_md.append(e_init[i])
+
+                    #     if w_init[i] >= 0.002:
+                    #         #this is the normal WE algorithm
+                    #         w_md.append(max(w_init[i]/(1+duplicated_walkers.count(i)), sys.float_info.min))
+                    #     else:
+                    #         w_md.append(w_init[i])
+                    #         break #do not duplicate too-light walkers
                             
             #merge simulations in bins with too many walkers
             elif len(indset) > walkers_per_bin:
-
+                #instead of doing what's below just merge the two lightest walkers to prevent probability from accumulating in heavier ones
+                
                 #total bin weight; does not change because merging operations preserve weight
                 w_bin = sum([w_init[i] for i in indset])
             

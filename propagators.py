@@ -25,6 +25,7 @@ def propagate(trj_coords, system, kT, timestep, nsteps):
 
     return trj_coords
 
+
 #Brownian diffusion
 #nsteps must be an integer multiple of save_period
 def propagate_nd(system, kT, trj_coords, timestep, nsteps, save_period):
@@ -43,3 +44,16 @@ def propagate_nd(system, kT, trj_coords, timestep, nsteps, save_period):
         trj_out.append(trj_coords.copy())
         #print(trj_out)
     return trj_out
+
+
+#Brownian diffusion
+#outputs only the last frame
+def propagate_nd_save1(system, kT, trj_coords, timestep, nsteps):
+  
+    nd = np.array(trj_coords.shape)   
+    D = system.diffusion_coefficient()
+    
+    for step in range(nsteps):
+        trj_coords += D/kT * system.F(trj_coords) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
+
+    return trj_coords

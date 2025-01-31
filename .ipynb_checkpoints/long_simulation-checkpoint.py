@@ -27,9 +27,29 @@ def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, s
     
     bins = np.linspace(-bin_extreme, bin_extreme, nbins)
     bincenters = np.linspace(-bin_extreme+step/2, bin_extreme-step/2, nbins-1)
-    
-    histbinned = plt.hist(np.array(recorded_positions).flatten(), bins)
+
+    # binned_data = np.digitize(np.array(recorded_positions).flatten(), bins)
+    # bin_counts = [np.count(binned_data, i) for i in range(nbins)]
+
+    data_flat = np.array(recorded_positions).flatten()
+    histbinned = plt.hist(data_flat, bins)
     plt.show()
+
+    z_kT = sum([np.exp(-system.potential(x)/kT) for x in bincenters])
+    eq_pops_analytic = [np.exp(-system.potential(x)/kT)/z_kT for x in bincenters]
+    plt.plot(bincenters, eq_pops_analytic)
+
+    eq_pops_simulation = histbinned[0]/len(data_flat)
+    plt.plot(bincenters, eq_pops_simulation)
+    
+    plt.show()
+
+    rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)]))
+    kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)])
+    print(f"kl divergence = {kl_divergence}")
+    print(f"weighted RMSE = {rmse_weighted}")
+
+
     
     #---------------------------------------------------------------
     #calculate and plot the energy per unit x from the probability
@@ -56,6 +76,6 @@ def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, s
 
     x_data = bincenters[ind_extreme:-ind_extreme]
     e_data = energies[ind_extreme:-ind_extreme]
-    plt.plot(x_data, e_data)
+    #plt.plot(x_data, e_data)
     
     return x_data, e_data, long_trjs
