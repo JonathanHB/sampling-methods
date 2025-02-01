@@ -15,12 +15,25 @@ class unit_double_well():
 
     def diffusion_coefficient(self):
         return 1
-
-    def macro_class(self, x, e):
+    
+    def macro_class(self, x):
         thr = 1/np.sqrt(2)
         if x < -thr:
             return 0
         elif x > thr:
             return 1
         else:
+            return -1
+            
+    def ensemble_class(self, x, e):  
+        ms = self.macro_class(x)
+        if ms != -1:
+            return ms
+        else:
             return e
+
+    def n_macrostates(self):
+        return 2
+    
+    def standard_init_coord(self):
+        return -1/np.sqrt(2)

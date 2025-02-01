@@ -79,3 +79,40 @@ def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, s
     #plt.plot(x_data, e_data)
     
     return x_data, e_data, long_trjs
+
+
+#calculate mean first passage time from long trajectories
+def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
+
+    n_transitions = np.zeros([n_macrostates, n_macrostates])
+    frames_by_state = np.zeros(n_macrostates)
+    
+    for trj in trajectories:
+        
+        #get initial state
+        last_state = macrostate_classifier(trj[0])
+        last_macrostate = last_state
+        for xt in trj:
+    
+            current_state = macrostate_classifier(xt)
+
+            #the former and latter or conditions describe the following respectively:
+            #    transitions between different states regardless of whether any intermediate states were recorded
+            #    self transitions in which the trajectory exited the macrostate but returned before reaching a different macrostate
+            if (current_state != -1 and last_macrostate != -1) and \
+                (current_state != last_macrostate or (current_state == last_macrostate and last_state == -1)):
+                n_transitions[current_state][last_macrostate] += 1           
+
+            #update buffers
+            last_state = current_state
+            if current_state != -1:
+                frames_by_state[current_state] += 1
+                last_macrostate = current_state
+
+    n_steps = sum([len(trj) for trj in trajectories])
+
+    #in steps
+    mfpts = save_period*np.reciprocal(n_transitions)*frames_by_state
+    
+    return n_transitions, mfpts
+    

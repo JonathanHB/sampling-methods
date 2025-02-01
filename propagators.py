@@ -14,6 +14,7 @@ import numpy as np
 #returns
 #   final_trj_coords: final coordinates of the trajectories on the progress coordinate
 
+#unused; deprecated
 def propagate(trj_coords, system, kT, timestep, nsteps):
 
     D = system.diffusion_coefficient()
@@ -32,22 +33,20 @@ def propagate_nd(system, kT, trj_coords, timestep, nsteps, save_period):
   
     nd = np.array(trj_coords.shape)   
     D = system.diffusion_coefficient()
-    #B = lambda x : x + D/kT * system.F(x) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
     
     trj_out = []
     for i in range(int(nsteps/save_period)):
     
         for step in range(save_period):
             trj_coords += D/kT * system.F(trj_coords) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
-            #list(map(B, trj_coords))
-        #print(trj_coords)
+
         trj_out.append(trj_coords.copy())
-        #print(trj_out)
+
     return trj_out
 
 
 #Brownian diffusion
-#outputs only the last frame
+#outputs only the last frame; avoids an extra layer of for loops when running WE
 def propagate_nd_save1(system, kT, trj_coords, timestep, nsteps):
   
     nd = np.array(trj_coords.shape)   

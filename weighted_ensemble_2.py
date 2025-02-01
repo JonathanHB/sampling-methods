@@ -39,6 +39,9 @@ import matplotlib.pyplot as plt
 #      5. pass coordinates, weights, and ensembles to next round 
 
 def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
+
+    split_limit = 2.00001*sys.float_info.min #0.0002
+    merge_limit = 1 #effectively no limit
     
     #n_macrostates = 2
     
@@ -135,7 +138,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
                     x_md.append(x_init[i])
                     e_md.append(e_init[i])                    
 
-                    if i == walker_to_split and max(w_indset) >= 0.002:
+                    if i == walker_to_split and max(w_indset) >= split_limit:
                         #add halved weight for first child
                         w_md.append(w_init[i]/2)
 
@@ -163,37 +166,37 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
             elif len(indset) > walkers_per_bin:
                 #instead of doing what's below just merge the two lightest walkers to prevent probability from accumulating in heavier ones
                 
-                #total bin weight; does not change because merging operations preserve weight
-                w_bin = sum([w_init[i] for i in indset])
-            
-                #deepcopy; may be unnecessary
-                local_indset = [i for i in indset]
-                w_local_indset = [w_init[i] for i in indset]
+                w_indset = [w_init[i] for i in indset]
+                weights_ranked = list(np.argsort(w_indset))
+                
+                #note that using argmin and index will yield different results when multiple walkers have the same weight
+                ind_lightest = weights_ranked.index(0)  
+                weight_lightest = w_indset[ind_lightest]
+                
+                ind_second_lightest = weights_ranked.index(1)
+                weight_second_lightest = w_indset[ind_second_lightest]
 
-                #remove walkers until only walkers_per_bin remain
-                for i in range(len(indset)-walkers_per_bin):
-                    
-                    #weights for walker elimination from Huber and Kim 1996 appendix A
-                    w_removal = [(w_bin - w_init[i])/w_bin for i in local_indset]
-                    #pick 1 walker to remove, most likely one with a low weight
-                    #the [0] eliminates an unnecessary list layer
-                    removed_walker = random.choices([j for j in range(len(local_indset))], weights=w_removal, k = 1)[0]
-                    
-                    #remove the walker
-                    local_indset = [i for ii, i in enumerate(local_indset) if ii != removed_walker ]
-                    removed_weight = w_local_indset[removed_walker]
-                    w_local_indset = [i for ii, i in enumerate(w_local_indset) if ii != removed_walker ]
-                    
-                    #pick another walker to gain the removed walker's probability
-                    #selection chance is proportional to existing weight
-                    recipient_walker = random.choices([j for j in range(len(local_indset))], weights=w_local_indset, k = 1)[0]
-                    w_local_indset[recipient_walker] += removed_weight
+                #remove no walker if none meet the criteria below
+                removed_walker = -1
+                
+                if weight_lightest < merge_limit:
+                
+                    weights_pair = weight_lightest + weight_second_lightest
+                    inds_removal = [ind_lightest, ind_second_lightest]
+                    weights_removal = [weight_lightest/weights_pair, weight_second_lightest/weights_pair]
+    
+                    removed_walker = random.choices(inds_removal, weights=weights_removal, k = 1)[0]
 
-                for i in range(walkers_per_bin):
-                    x_md.append(x_init[local_indset[i]])
-                    e_md.append(e_init[local_indset[i]])
-                    w_md.append(w_local_indset[i])
+                for ii, i in enumerate(indset):
+                    if ii != removed_walker:
+                        x_md.append(x_init[i])
+                        e_md.append(e_init[i])
 
+                        #add the removed walker's weight to the walker with which it was merged
+                        if ii in [ind_lightest, ind_second_lightest] and removed_walker != -1:
+                            w_md.append(w_init[i] + w_init[indset[removed_walker]])
+                        else:
+                            w_md.append(w_init[i])
 
         #----------------------------------------------------------------------
         #run dynamics
@@ -222,6 +225,27 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
     return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round
 
 
+def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrange, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
+
+    #start 1 bin worth of walkers at x_init_val with equal weights
+    x_init = np.array([x_init_val for element in range(walkers_per_bin)])
+    w_init = [1/walkers_per_bin for element in range(walkers_per_bin)]
+    
+    #run weighted ensemble with brownian dynamics
+    #put this on multiple lines
+    return weighted_ensemble(\
+                        x_init,\
+                        w_init,\
+                        nrounds,\
+                        nbins,\
+                        walkers_per_bin,\
+                        binrange, propagator,\
+                        prop_params,\
+                        macrostate_classifier,\
+                        n_macrostates,\
+                        ha_binning=False)
+
+
 def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_trans_by_round, t, n_macrostates, potential_func, macrostate_classifier, kT):
     
     binwidth = (binbounds[-1]-binbounds[0])/len(binbounds)
@@ -237,7 +261,7 @@ def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_
     pops_norm = [p/total_nonnorm_pop for p in implied_pops_nonnorm]
     
     energies_norm = [-kT*np.log(p/(total_nonnorm_pop*binwidth)) for p in implied_pops_nonnorm]
-    plt.plot(bincenters, energies_norm)
+    #plt.plot(bincenters, energies_norm)
     
     #--------------------------------------------
     #energy estimate from WE weights
@@ -255,8 +279,8 @@ def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_
     we_bincenters = [bincenters[wie[0]] for wie in we_i_energies]
     we_energies = [wie[1] for wie in we_i_energies]
     
-    plt.plot(we_bincenters, we_energies, linestyle="dashed")
-    plt.show()
+    #plt.plot(we_bincenters, we_energies, linestyle="dashed")
+    #plt.show()
 
     #probability density comparison
     plt.plot(bincenters, pops_norm)
