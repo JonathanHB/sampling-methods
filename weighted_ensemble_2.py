@@ -249,19 +249,7 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrang
 def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_trans_by_round, t, n_macrostates, potential_func, macrostate_classifier, kT):
     
     binwidth = (binbounds[-1]-binbounds[0])/len(binbounds)
-
-    # bin energies integrated over the width of the bin,
-    # so the energies below should be plotted at the centers of the corresponding bins
-    bincenters = [binbounds[0]-binwidth/2] + [bb+binwidth/2 for bb in binbounds]
-
-    #--------------------------------------------
-    #true energy
-    implied_pops_nonnorm = [np.exp(-potential_func(x)/kT) for x in bincenters]
-    total_nonnorm_pop = sum(implied_pops_nonnorm)
-    pops_norm = [p/total_nonnorm_pop for p in implied_pops_nonnorm]
-    
-    energies_norm = [-kT*np.log(p/(total_nonnorm_pop*binwidth)) for p in implied_pops_nonnorm]
-    #plt.plot(bincenters, energies_norm)
+    bincenters = np.linspace(binbounds[0]-binwidth/2, binbounds[-1]+binwidth/2, len(binbounds)+1)
     
     #--------------------------------------------
     #energy estimate from WE weights
@@ -275,20 +263,9 @@ def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_
     for i, b in enumerate(binned_trj):
         binned_total_weights[b] += wtrj_flat[i]/t
         
-    we_i_energies = [[i, -np.log(wt/binwidth)] for i, wt in enumerate(binned_total_weights) if wt > 0]
-    we_bincenters = [bincenters[wie[0]] for wie in we_i_energies]
-    we_energies = [wie[1] for wie in we_i_energies]
+    sampled_we_inds_energies = [[i, -np.log(wt/binwidth)] for i, wt in enumerate(binned_total_weights) if wt > 0]
+    sampled_we_bincenters = [bincenters[wie[0]] for wie in sampled_we_inds_energies]
+    sampled_we_energies = [wie[1] for wie in sampled_we_inds_energies]
     
-    #plt.plot(we_bincenters, we_energies, linestyle="dashed")
-    #plt.show()
-
-    #probability density comparison
-    plt.plot(bincenters, pops_norm)
-    plt.plot(bincenters, binned_total_weights)
-    plt.show()
+    return bincenters, binned_total_weights, sampled_we_bincenters, sampled_we_energies
     
-    rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(pops_norm, binned_total_weights)]))
-    #kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(pops_norm, binned_total_weights)])
-    
-    #print(f"kl divergence = {kl_divergence}")
-    print(f"weighted RMSE = {rmse_weighted}")

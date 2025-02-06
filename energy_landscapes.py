@@ -100,20 +100,22 @@ def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = 
     
     plt.show()
 
-    metrics = {}
+    metrics_out = {}
 
     if "rmsew" in metrics:
         #without weighting, extending the region over which the RMS error is computed makes it look artificially better because there are large areas where the true and estimated probability are both about 0
         rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)]))
         print(f"weighted RMSE = {rmse_weighted}")
-        metrics["rmsew"] = rmse_weighted
+        metrics_out["rmsew"] = rmse_weighted
 
     if "maew" in metrics:
         #without weighting, extending the region over which the mean absolute error is computed makes it look artificially better because there are large areas where the true and estimated probability are both about 0
         mae_weighted = np.mean([epa*abs(eps-epa) for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)])
         print(f"weighted MAE = {mae_weighted}")            
-        metrics["maew"] = rmse_weighted
+        metrics_out["maew"] = rmse_weighted
 
+    return metrics_out
+        
     #kl divergence has bad numerical properties when any estimated entries are 0, which some usually are
     #kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)])
     #print(f"kl divergence = {kl_divergence}")

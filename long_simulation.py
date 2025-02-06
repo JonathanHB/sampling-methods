@@ -61,7 +61,7 @@ def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetri
     x_sampled = []
     e_sampled = []
 
-    #calculate energies and identify the useful data range
+    #calculate energies and identify the area of continuous sampling
     for i, p in enumerate(eq_pops):
         if p != 0:
             #normalized probability to calculate energy per unit x rather than per bin
@@ -77,8 +77,7 @@ def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetri
                 ind_max = i
             
 
-    #plot and fit to the sampled region
-
+    #all sampled points
     x_cont = bincenters[ind_min:ind_max]
     e_cont = energies[ind_min:ind_max]
     
