@@ -1,22 +1,20 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel, nbins):
+def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel):
     
     #---------------------------------------------------------------
-    #determine probability distribution of n_parallel long simulations
+    #run n_parallel long simulations
     
     #reinitialize x_init each time
     x_init = np.array([x_init_coord for element in range(n_parallel)])
     long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period))
-    # recorded_positions = []
 
-    # for i in range(nrounds):
-    #     x_init = propagator(x_init, prop_params[0], prop_params[1], prop_params[2], prop_params[3], prop_params[4])
-    #     #propagate(x_init, F, D, kT, dt, nsteps)
-    #     recorded_positions.append(x_init)
-        
-    #---------------------------------------------------------------
+    return long_trjs
+
+
+def estimate_energy_landscape_histogram(long_trjs, kT, nbins):
+    
     #examine the probability distribution and bin the trajectory using a histogram
     recorded_positions = long_trjs.flatten()
     
@@ -34,23 +32,9 @@ def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, s
     data_flat = np.array(recorded_positions).flatten()
     histbinned = plt.hist(data_flat, bins)
     plt.show()
-
-    z_kT = sum([np.exp(-system.potential(x)/kT) for x in bincenters])
-    eq_pops_analytic = [np.exp(-system.potential(x)/kT)/z_kT for x in bincenters]
-    plt.plot(bincenters, eq_pops_analytic)
-
+    
     eq_pops_simulation = histbinned[0]/len(data_flat)
-    plt.plot(bincenters, eq_pops_simulation)
-    
-    plt.show()
 
-    rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)]))
-    kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)])
-    print(f"kl divergence = {kl_divergence}")
-    print(f"weighted RMSE = {rmse_weighted}")
-
-
-    
     #---------------------------------------------------------------
     #calculate and plot the energy per unit x from the probability
 
@@ -78,7 +62,7 @@ def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, s
     e_data = energies[ind_extreme:-ind_extreme]
     #plt.plot(x_data, e_data)
     
-    return x_data, e_data, long_trjs
+    return x_data, eq_pops_simulation, e_data
 
 
 #calculate mean first passage time from long trajectories

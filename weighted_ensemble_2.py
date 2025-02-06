@@ -270,7 +270,7 @@ def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_
 
     binned_trj = np.digitize(xtrj_flat, bins = binbounds)
 
-    #+2 is for the end bins
+    #+1 is for the end bins
     binned_total_weights = np.zeros(len(binbounds)+1)
     for i, b in enumerate(binned_trj):
         binned_total_weights[b] += wtrj_flat[i]/t
@@ -288,7 +288,7 @@ def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_
     plt.show()
     
     rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(pops_norm, binned_total_weights)]))
-    kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(pops_norm, binned_total_weights)])
+    #kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(pops_norm, binned_total_weights)])
     
-    print(f"kl divergence = {kl_divergence}")
+    #print(f"kl divergence = {kl_divergence}")
     print(f"weighted RMSE = {rmse_weighted}")

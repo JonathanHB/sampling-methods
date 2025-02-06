@@ -1,84 +1,88 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def recover_energy_landscape(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel, nbins):
+def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel):
     
     #---------------------------------------------------------------
-    #determine probability distribution of n_parallel long simulations
+    #run n_parallel long simulations
     
     #reinitialize x_init each time
     x_init = np.array([x_init_coord for element in range(n_parallel)])
     long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period))
-    # recorded_positions = []
 
-    # for i in range(nrounds):
-    #     x_init = propagator(x_init, prop_params[0], prop_params[1], prop_params[2], prop_params[3], prop_params[4])
-    #     #propagate(x_init, F, D, kT, dt, nsteps)
-    #     recorded_positions.append(x_init)
-        
-    #---------------------------------------------------------------
-    #examine the probability distribution and bin the trajectory using a histogram
-    recorded_positions = long_trjs.flatten()
+    return long_trjs
+
+
+def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetric = True):
     
-    bin_extreme = max(np.max(recorded_positions), -np.min(recorded_positions))
-    #nbins = 101 #polynomial fit is insensitive to this [verify]
+    #-------define bins--------------------------------------------------------------------
 
-    step = 2*bin_extreme/nbins
+    #flatten trajectory since the order of the frames does not matter here
+    trj_flat = trjs.flatten()
+
+    #set bin boundaries
+
+    if binrange == []:
+
+        epsilon = 10**-9 #to avoid any >= vs > issues at bin boundaries
+        if symmetric:    
+            bin_extreme = max(np.max(trj_flat), -np.min(trj_flat))
+            bin_min = -bin_extreme-epsilon
+            bin_max = bin_extreme+epsilon
+        else:
+            bin_min = np.min(trj_flat)-epsilon
+            bin_max = np.max(trj_flat)+epsilon
+    else:
+        bin_min = binrange[0]
+        bin_max = binrange[1]
+
+    step = (bin_max-bin_min)/nbins
     
-    bins = np.linspace(-bin_extreme, bin_extreme, nbins)
-    bincenters = np.linspace(-bin_extreme+step/2, bin_extreme-step/2, nbins-1)
+    binbounds = np.linspace(bin_min, bin_max, nbins+1)
+    bincenters = np.linspace(bin_min-step/2, bin_max+step/2, nbins+2)
 
-    # binned_data = np.digitize(np.array(recorded_positions).flatten(), bins)
-    # bin_counts = [np.count(binned_data, i) for i in range(nbins)]
+    #-------bin trajectory--------------------------------------------------------------------
 
-    data_flat = np.array(recorded_positions).flatten()
-    histbinned = plt.hist(data_flat, bins)
-    plt.show()
+    #note that digitize reserves the index 0 for entries below the first bin, 
+    # but in this case the bins have been constructed so that all entries lie within the explicit bin range
+    # so the first and last bins of eq_pops should be empty
+    binned_trj = np.digitize(trj_flat, bins = binbounds)
 
-    z_kT = sum([np.exp(-system.potential(x)/kT) for x in bincenters])
-    eq_pops_analytic = [np.exp(-system.potential(x)/kT)/z_kT for x in bincenters]
-    plt.plot(bincenters, eq_pops_analytic)
+    eq_pops = np.zeros(nbins+2)
+    for b in binned_trj:
+        eq_pops[b] += 1/len(trj_flat)
 
-    eq_pops_simulation = histbinned[0]/len(data_flat)
-    plt.plot(bincenters, eq_pops_simulation)
-    
-    plt.show()
-
-    rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)]))
-    kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(eq_pops_analytic, eq_pops_simulation)])
-    print(f"kl divergence = {kl_divergence}")
-    print(f"weighted RMSE = {rmse_weighted}")
-
-
-    
-    #---------------------------------------------------------------
-    #calculate and plot the energy per unit x from the probability
+    #-------calculate energies--------------------------------------------------------------------
+    #return only the continuous central range where all bins have nonzero occupancy
 
     energies = []
-    ind_extreme = 1
-    ind_extreme_pad = 0
+    ind_min = 0
+    ind_max = nbins+1
+    x_sampled = []
+    e_sampled = []
 
     #calculate energies and identify the useful data range
-    for i, p in enumerate(histbinned[0]):
+    for i, p in enumerate(eq_pops):
         if p != 0:
             #normalized probability to calculate energy per unit x rather than per bin
-            energies.append(-kT*np.log(p/(len(np.array(recorded_positions).flatten())*step)))
+            energies.append(-kT*np.log(p/step))
+
+            x_sampled.append(bincenters[i])
+            e_sampled.append(energies[-1])
         else:
             energies.append(0)
-            if i < len(histbinned[0])/2:
-                ind_extreme = i+1
-            else:
-                ind_extreme = max(ind_extreme, len(histbinned[0])-i)
-
-    ind_extreme += ind_extreme_pad
+            if i < (nbins+2)/2:
+                ind_min = i+1
+            elif ind_max == nbins+1:
+                ind_max = i
+            
 
     #plot and fit to the sampled region
 
-    x_data = bincenters[ind_extreme:-ind_extreme]
-    e_data = energies[ind_extreme:-ind_extreme]
-    #plt.plot(x_data, e_data)
+    x_cont = bincenters[ind_min:ind_max]
+    e_cont = energies[ind_min:ind_max]
     
-    return x_data, e_data, long_trjs
+    return bincenters, eq_pops, x_sampled, e_sampled, x_cont, e_cont
 
 
 #calculate mean first passage time from long trajectories
@@ -87,7 +91,7 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
     n_transitions = np.zeros([n_macrostates, n_macrostates])
     frames_by_state = np.zeros(n_macrostates)
     
-    for trj in trajectories:
+    for trj in trajectories.transpose():
         
         #get initial state
         last_state = macrostate_classifier(trj[0])

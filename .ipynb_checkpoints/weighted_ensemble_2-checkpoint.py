@@ -288,7 +288,7 @@ def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_
     plt.show()
     
     rmse_weighted = np.sqrt(np.mean([epa*(eps-epa)**2 for epa, eps in zip(pops_norm, binned_total_weights)]))
-    kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(pops_norm, binned_total_weights)])
+    #kl_divergence = sum([epa*np.log(epa/eps) for epa, eps in zip(pops_norm, binned_total_weights)])
     
-    print(f"kl divergence = {kl_divergence}")
+    #print(f"kl divergence = {kl_divergence}")
     print(f"weighted RMSE = {rmse_weighted}")
