@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import MSM_methods
 
 def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel):
     
@@ -13,13 +14,7 @@ def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nste
     return long_trjs
 
 
-def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetric = True):
-    
-    #-------define bins--------------------------------------------------------------------
-
-    #flatten trajectory since the order of the frames does not matter here
-    trj_flat = trjs.flatten()
-
+def get_bin_boundaries(trj_flat, nbins, binrange = [], symmetric = True):
     #set bin boundaries
 
     if binrange == []:
@@ -40,6 +35,19 @@ def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetri
     
     binbounds = np.linspace(bin_min, bin_max, nbins+1)
     bincenters = np.linspace(bin_min-step/2, bin_max+step/2, nbins+2)
+
+    return binbounds, bincenters, step
+
+
+def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetric = True):
+    
+
+    #flatten trajectory since the order of the frames does not matter here
+    trj_flat = trjs.flatten()
+
+    #-------define bins--------------------------------------------------------------------
+
+    binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
 
     #-------bin trajectory--------------------------------------------------------------------
 
@@ -80,7 +88,7 @@ def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetri
     #all sampled points
     x_cont = bincenters[ind_min:ind_max]
     e_cont = energies[ind_min:ind_max]
-    
+
     return bincenters, eq_pops, x_sampled, e_sampled, x_cont, e_cont
 
 
@@ -119,3 +127,64 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
     
     return n_transitions, mfpts
     
+
+
+def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_period, binrange = [], symmetric = True, show_TPM=False):
+
+    #get bin boundaries
+    trj_flat = trjs.flatten()
+    binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
+
+    #-------build MSM--------------------------------------------------------
+
+    trj_discrete = np.digitize(trjs, bins = binbounds)
+    transitions = [[trj_discrete[i][j], trj_discrete[i+1][j]] for j in range(trj_discrete.shape[1]) for i in range(len(trj_discrete)-1) ]
+
+    tpm, states_in_order = MSM_methods.transitions_2_msm(transitions)
+    if show_TPM:
+        plt.imshow(tpm)
+        plt.show()
+
+    eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
+    x_msm = [bincenters[i] for i in states_in_order]
+
+
+    #this part should be abstracted out into MSM_methods
+    msm_state_macrostates = [macrostate_classifier(x) for x in x_msm]
+
+    mfpts = np.zeros([n_macrostates, n_macrostates])
+
+    #for each destination macrostate
+    for mf in range(n_macrostates):
+        transitions_blotted = np.array(tpm)
+        for si, s in enumerate(msm_state_macrostates):
+            if s == mf:
+                transitions_blotted[si,:] = 0
+                #transitions_blotted[si,si] = 1
+
+        # plt.imshow(transitions_blotted)
+        # plt.show()
+
+        for mi in range(n_macrostates):
+            if mi != mf:
+                #print(msm_state_macrostates)
+                #print()
+                eqp_msm_init = np.array([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm)]).reshape([len(eqp_msm), 1])
+                #for s, si in enumerate(msm_state_macrostates):
+                #print(eqp_msm_init)
+
+                p_t = []
+                for t in range(1000):
+                    p_t.append(np.sum(eqp_msm_init))
+                    eqp_msm_init = np.matmul(transitions_blotted, eqp_msm_init)
+                    if p_t[-1] <= p_t[0]/2:
+                        p_t.append(np.sum(eqp_msm_init))
+                        mfpts[mf][mi] = t*save_period
+                        break
+
+                # plt.plot(p_t)
+                # plt.show()
+                
+
+    return x_msm, eqp_msm, msm_state_macrostates, mfpts
+

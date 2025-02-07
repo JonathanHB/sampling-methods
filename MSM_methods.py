@@ -1,6 +1,10 @@
 #Jonathan Borowsky
 #1/31/25
-#fast row normalization based MSM construction methods; not as reliable as those in pyemma
+#fast row normalization based MSM construction methods; not as reliable as those in pyemma, which use fancier but slower bayesian estimators
+
+import numpy as np
+from sklearn.preprocessing import normalize
+from scipy.sparse.csgraph import connected_components
 
 def transitions_2_msm(transitions):
     
