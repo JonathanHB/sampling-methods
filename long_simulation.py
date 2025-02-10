@@ -120,7 +120,7 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
                 frames_by_state[current_state] += 1
                 last_macrostate = current_state
 
-    n_steps = sum([len(trj) for trj in trajectories])
+    #n_steps = sum([len(trj) for trj in trajectories])
 
     #in steps
     mfpts = save_period*np.reciprocal(n_transitions)*frames_by_state
@@ -129,7 +129,7 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
     
 
 
-def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_period, binrange = [], symmetric = True, show_TPM=False):
+def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_period, lag_time=1, binrange = [], symmetric = True, show_TPM=False):
 
     #get bin boundaries
     trj_flat = trjs.flatten()
@@ -138,14 +138,14 @@ def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_per
     #-------build MSM--------------------------------------------------------
 
     trj_discrete = np.digitize(trjs, bins = binbounds)
-    transitions = [[trj_discrete[i][j], trj_discrete[i+1][j]] for j in range(trj_discrete.shape[1]) for i in range(len(trj_discrete)-1) ]
+    transitions = [[trj_discrete[i][j], trj_discrete[i+lag_time][j]] for j in range(trj_discrete.shape[1]) for i in range(len(trj_discrete)-lag_time) ]
 
     tpm, states_in_order = MSM_methods.transitions_2_msm(transitions)
     if show_TPM:
-        plt.imshow(tpm)
+        plt.matshow(tpm)
         plt.show()
 
-    eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
+    eqp_msm_init = MSM_methods.tpm_2_eqprobs(tpm)
     x_msm = [bincenters[i] for i in states_in_order]
 
 
@@ -162,29 +162,131 @@ def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_per
                 transitions_blotted[si,:] = 0
                 #transitions_blotted[si,si] = 1
 
-        # plt.imshow(transitions_blotted)
-        # plt.show()
+        #plt.matshow(transitions_blotted)
+        #plt.show()
+        #print(transitions_blotted)
 
         for mi in range(n_macrostates):
             if mi != mf:
                 #print(msm_state_macrostates)
                 #print()
-                eqp_msm_init = np.array([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm)]).reshape([len(eqp_msm), 1])
+                eqp_msm = np.array([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm_init)]).reshape([len(eqp_msm_init), 1])
                 #for s, si in enumerate(msm_state_macrostates):
-                #print(eqp_msm_init)
 
-                p_t = []
-                for t in range(1000):
-                    p_t.append(np.sum(eqp_msm_init))
-                    eqp_msm_init = np.matmul(transitions_blotted, eqp_msm_init)
-                    if p_t[-1] <= p_t[0]/2:
-                        p_t.append(np.sum(eqp_msm_init))
-                        mfpts[mf][mi] = t*save_period
-                        break
-
-                # plt.plot(p_t)
-                # plt.show()
+                rate_per_unit = []
+                p_t = [np.sum(eqp_msm)]
+                for t in range(500):
+                    eqp_msm = np.matmul(transitions_blotted, eqp_msm)
+                    p_t.append(np.sum(eqp_msm))
+                    prob_in_init = sum([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm)]) #there's a faster way of doing this
+                    rate_per_unit.append((p_t[-2]-p_t[-1])/prob_in_init)
+                    #median first passage time; NOT the MFPT
+                    # if p_t[-1] <= p_t[0]/2: 
+                    #     p_t.append(np.sum(eqp_msm_init))
+                    #     mfpts[mf][mi] = t*save_period
+                    #     break
+                    #     pass
+                mfpts[mf][mi] = save_period*lag_time/rate_per_unit[-1]
+                #plt.plot(rate_per_unit)
+                #plt.show()
                 
 
-    return x_msm, eqp_msm, msm_state_macrostates, mfpts
+    return x_msm, eqp_msm_init, msm_state_macrostates, mfpts
 
+
+
+#calculate mean first passage time from long trajectories
+def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], symmetric = True, show_TPM=False):
+
+    nm = system.n_macrostates()
+
+    #get bin boundaries
+    trj_flat = trjs.flatten()
+    binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
+
+    trjs_discrete = np.digitize(trjs, bins = binbounds).transpose()
+    macrostates_discrete = [system.macro_class(x) for x in bincenters]
+
+    #n_transitions = np.zeros([system.n_macrostates*len(bincenters), system.n_macrostates*len(bincenters)])
+
+    transitions = []
+
+    for trj in trjs_discrete:
+        
+        transitions_trj = []
+
+        #get initial state
+        last_ensemble = macrostates_discrete[trj[0]]
+
+        for i in range(len(trj)-lag_time):
+    
+            current_macrostate = macrostates_discrete[trj[i+1]]
+
+            if current_macrostate == -1:
+                current_ensemble = last_ensemble
+            else:
+                current_ensemble = current_macrostate
+
+            transitions.append([trj[i+1]*nm + current_ensemble, trj[i]*nm + last_ensemble])
+
+            last_ensemble = current_ensemble
+
+        transitions += transitions_trj
+
+
+    tpm, states_in_order = MSM_methods.transitions_2_msm(transitions)
+    if show_TPM:
+        plt.matshow(tpm)
+        plt.show()
+
+    eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
+
+    #generalize
+    p_msm_a = []
+    x_msm_a = []
+    p_msm_b = []
+    x_msm_b = []
+
+    p_msm_total = []
+
+    for i, so in enumerate(states_in_order):
+        if so%2 == 0:
+            x_msm_a.append(bincenters[int(so//2)])
+            p_msm_a.append(eqp_msm[i])
+        else:
+            x_msm_b.append(bincenters[int(so//2)])
+            p_msm_b.append(eqp_msm[i])
+
+    #x_msm = [bincenters[i] for i in states_in_order]
+
+    plt.plot(x_msm_a, p_msm_a)
+    plt.plot(x_msm_b, p_msm_b)
+
+
+    #assemble halves of the energy landscape
+    ha_sio_config = []
+    ha_eqp_config = []
+    
+    for i in range(0, len(bincenters)*2, 2):
+        
+        config_state_prob = 0
+        
+        if i in states_in_order:
+            config_state_prob += eqp_msm[states_in_order.index(i)][0]
+        if i+1 in states_in_order:
+            config_state_prob += eqp_msm[states_in_order.index(i+1)][0]
+        
+        #if len(config_state_prob) > 1:
+        #    return "error; too many energies"
+        
+        ha_sio_config.append(bincenters[int(i/2)])
+        ha_eqp_config.append(config_state_prob)
+
+    plt.plot(ha_sio_config, ha_eqp_config)
+
+    mfpts = []
+
+    #for i in range(nm):
+    
+
+    mfpt_ab = np.dot(ha_eqp_config, tpm[i])
