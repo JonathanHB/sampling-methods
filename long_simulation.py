@@ -148,13 +148,13 @@ def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_per
     eqp_msm_init = MSM_methods.tpm_2_eqprobs(tpm)
     x_msm = [bincenters[i] for i in states_in_order]
 
-
+    #------------------------------------------------------------------------
     #this part should be abstracted out into MSM_methods
     msm_state_macrostates = [macrostate_classifier(x) for x in x_msm]
 
     mfpts = np.zeros([n_macrostates, n_macrostates])
 
-    #for each destination macrostate
+    #calculate MFPT into each destination macrostate
     for mf in range(n_macrostates):
         transitions_blotted = np.array(tpm)
         for si, s in enumerate(msm_state_macrostates):
@@ -178,14 +178,11 @@ def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_per
                 for t in range(500):
                     eqp_msm = np.matmul(transitions_blotted, eqp_msm)
                     p_t.append(np.sum(eqp_msm))
+
+                    #calculate how much probability is left in the initial macrostate
                     prob_in_init = sum([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm)]) #there's a faster way of doing this
                     rate_per_unit.append((p_t[-2]-p_t[-1])/prob_in_init)
-                    #median first passage time; NOT the MFPT
-                    # if p_t[-1] <= p_t[0]/2: 
-                    #     p_t.append(np.sum(eqp_msm_init))
-                    #     mfpts[mf][mi] = t*save_period
-                    #     break
-                    #     pass
+
                 mfpts[mf][mi] = save_period*lag_time/rate_per_unit[-1]
                 #plt.plot(rate_per_unit)
                 #plt.show()
@@ -198,17 +195,20 @@ def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_per
 #calculate mean first passage time from long trajectories
 def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], symmetric = True, show_TPM=False):
 
+    #for consiceness
     nm = system.n_macrostates()
 
     #get bin boundaries
     trj_flat = trjs.flatten()
     binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
 
+    #bin trajectories in configurational space and assign the bins to macrostates
     trjs_discrete = np.digitize(trjs, bins = binbounds).transpose()
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
-    #n_transitions = np.zeros([system.n_macrostates*len(bincenters), system.n_macrostates*len(bincenters)])
 
+    #-----------------------------------------------------------------------------------------------------------------
+    #get a list of history augmented transitions from a list of parallel trajectories
     transitions = []
 
     for trj in trjs_discrete:
@@ -217,23 +217,33 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
         #get initial state
         last_ensemble = macrostates_discrete[trj[0]]
-
+        print(last_ensemble)
         for i in range(len(trj)-lag_time):
     
             current_macrostate = macrostates_discrete[trj[i+1]]
 
+            #if a macrostate is reached, that is now the ensemble. If in the no man's land, remain in the ensemble of the last macrostate
             if current_macrostate == -1:
                 current_ensemble = last_ensemble
             else:
                 current_ensemble = current_macrostate
 
+            #record transition
             transitions.append([trj[i+1]*nm + current_ensemble, trj[i]*nm + last_ensemble])
+            
+            if current_ensemble == -1 or last_ensemble == -1:
+                print(last_ensemble)
+                print(current_ensemble)
+                print("???")
 
+            #update buffer
             last_ensemble = current_ensemble
 
         transitions += transitions_trj
 
 
+    #-----------------------------------------------------------------------------------------------------------------
+    #build MSM
     tpm, states_in_order = MSM_methods.transitions_2_msm(transitions)
     if show_TPM:
         plt.matshow(tpm)
@@ -241,13 +251,15 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
     eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
 
-    #generalize
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #get populations in configuration space (along x) for each ensemble
+    #TODO generalize to n macrostates
+
     p_msm_a = []
     x_msm_a = []
     p_msm_b = []
     x_msm_b = []
-
-    p_msm_total = []
 
     for i, so in enumerate(states_in_order):
         if so%2 == 0:
@@ -263,7 +275,10 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
     plt.plot(x_msm_b, p_msm_b)
 
 
-    #assemble halves of the energy landscape
+    #-----------------------------------------------------------------------------------------------------------------
+    #assemble halves of the energy landscape to get the overall energy
+    #TODO generalize to n macrostates
+
     ha_sio_config = []
     ha_eqp_config = []
     
@@ -284,9 +299,68 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
     plt.plot(ha_sio_config, ha_eqp_config)
 
-    mfpts = []
 
-    #for i in range(nm):
+    #-----------------------------------------------------------------------------------------------------------------
+    #calculate mfpts
+
+    #a to b
+    target_ms = 1
+    starting_ms = 0
+    rate_ab = 0
+
+    trts = []
+
+    #equilibrium probabilities for the ensemble starting in macrostate 0 (the non-target macrostate) only
+    print(macrostates_discrete)
+    print(states_in_order)
+    eqp_msm_blotted = [eqpj[0] if states_in_order[j] % nm == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)]
+    print(eqp_msm_blotted)
+
+    #csi = connected state index
+    #fsi = full state index (in the n_macrostates*n_config_states state space)
+    for csi, fsi in enumerate(states_in_order):
+        print([fsi, fsi // nm])
+        if macrostates_discrete[fsi // nm] == target_ms:
+
+            #this is a row of transition probabilities going from all macrostates to the target
+            tpm_row_to_target = tpm[csi]
+            trts.append(tpm_row_to_target)
+
+            print(tpm_row_to_target)
+            rate_ab += np.dot(tpm_row_to_target, eqp_msm_blotted)
+            print(rate_ab)
+
+    #eqp_init_macrostate = sum([eqpj[0] if macrostates_discrete[states_in_order[j] // nm] == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)])
     
+    #plt.matshow(np.array(trts))
 
-    mfpt_ab = np.dot(ha_eqp_config, tpm[i])
+    #print(eqp_init_macrostate)
+    #rate_ab /= eqp_init_macrostate
+
+            #print(sum(tpm[states_in_order.index(i)]))
+    #print(save_period/rate_ab)
+
+
+
+
+
+
+
+
+    # mfpts = np.zeros([nm])
+
+    # for ms in range(1):
+    #     for i, md in enumerate(macrostates_discrete):
+    #         if md == ms:
+    #             print("-----------------------------------------------------------")
+    #             print(len(bincenters)*2)
+    #             print(tpm.shape)
+
+            
+
+    #             mfpts[0] += np.dot(ha_eqp_config, tpm[i])
+
+
+
+#macrostates_discrete: coord index to macrostate
+#

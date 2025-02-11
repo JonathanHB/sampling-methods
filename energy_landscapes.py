@@ -77,9 +77,9 @@ class unit_double_well(potential_well_1d):
     
     def macro_class(self, x):
         thr = 1/np.sqrt(2)
-        if x < -thr:
+        if x <= -thr:
             return 0
-        elif x > thr:
+        elif x >= thr:
             return 1
         else:
             return -1
@@ -88,7 +88,7 @@ class unit_double_well(potential_well_1d):
         return 2
     
     def standard_init_coord(self):
-        return -1/np.sqrt(2) 
+        return -1.0 #-1/np.sqrt(2) 
 
     def __init__(self):
         super().__init__(self.potential, self.macro_class)
