@@ -7,11 +7,15 @@ def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nste
     #---------------------------------------------------------------
     #run n_parallel long simulations
     
-    #reinitialize x_init each time
+    #set initial positions
     x_init = np.array([x_init_coord for element in range(n_parallel)])
     long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period))
 
-    return long_trjs
+    #x_init is modified by being fed in to the propagator
+    x_init_2 = np.array([x_init_coord for element in range(n_parallel)])
+
+    #include the starting frame
+    return np.concatenate((x_init_2.reshape(1,n_parallel), long_trjs)) 
 
 
 def get_bin_boundaries(trj_flat, nbins, binrange = [], symmetric = True):
@@ -217,10 +221,10 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
         #get initial state
         last_ensemble = macrostates_discrete[trj[0]]
-        print(last_ensemble)
+        
         for i in range(len(trj)-lag_time):
     
-            current_macrostate = macrostates_discrete[trj[i+1]]
+            current_macrostate = macrostates_discrete[trj[i+lag_time]]
 
             #if a macrostate is reached, that is now the ensemble. If in the no man's land, remain in the ensemble of the last macrostate
             if current_macrostate == -1:
@@ -229,12 +233,7 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
                 current_ensemble = current_macrostate
 
             #record transition
-            transitions.append([trj[i+1]*nm + current_ensemble, trj[i]*nm + last_ensemble])
-            
-            if current_ensemble == -1 or last_ensemble == -1:
-                print(last_ensemble)
-                print(current_ensemble)
-                print("???")
+            transitions.append([trj[i]*nm + last_ensemble, trj[i+lag_time]*nm + current_ensemble])
 
             #update buffer
             last_ensemble = current_ensemble
@@ -291,9 +290,6 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
         if i+1 in states_in_order:
             config_state_prob += eqp_msm[states_in_order.index(i+1)][0]
         
-        #if len(config_state_prob) > 1:
-        #    return "error; too many energies"
-        
         ha_sio_config.append(bincenters[int(i/2)])
         ha_eqp_config.append(config_state_prob)
 
@@ -303,64 +299,34 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
     #-----------------------------------------------------------------------------------------------------------------
     #calculate mfpts
 
-    #a to b
     target_ms = 1
     starting_ms = 0
-    rate_ab = 0
 
-    trts = []
+    mfpts = np.zeros([nm, nm])
 
-    #equilibrium probabilities for the ensemble starting in macrostate 0 (the non-target macrostate) only
-    print(macrostates_discrete)
-    print(states_in_order)
-    eqp_msm_blotted = [eqpj[0] if states_in_order[j] % nm == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)]
-    print(eqp_msm_blotted)
+    for target_ms in range(nm):
+        for starting_ms in range(nm):
 
-    #csi = connected state index
-    #fsi = full state index (in the n_macrostates*n_config_states state space)
-    for csi, fsi in enumerate(states_in_order):
-        print([fsi, fsi // nm])
-        if macrostates_discrete[fsi // nm] == target_ms:
+            rate = 0
 
-            #this is a row of transition probabilities going from all macrostates to the target
-            tpm_row_to_target = tpm[csi]
-            trts.append(tpm_row_to_target)
+            #equilibrium probabilities for the ensemble starting in macrostate 0 (the non-target macrostate) only
+            eqp_msm_blotted = [eqpj[0] if states_in_order[j] % nm == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)]
 
-            print(tpm_row_to_target)
-            rate_ab += np.dot(tpm_row_to_target, eqp_msm_blotted)
-            print(rate_ab)
+            #csi = connected state index
+            #fsi = full state index (in the n_macrostates*n_config_states state space)
+            for csi, fsi in enumerate(states_in_order):
+                if macrostates_discrete[fsi // nm] == target_ms:
 
-    #eqp_init_macrostate = sum([eqpj[0] if macrostates_discrete[states_in_order[j] // nm] == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)])
-    
-    #plt.matshow(np.array(trts))
+                    #this is a row of transition probabilities going from all macrostates to the target
+                    tpm_row_to_target = tpm[csi]
 
-    #print(eqp_init_macrostate)
-    #rate_ab /= eqp_init_macrostate
+                    rate += np.dot(tpm_row_to_target, eqp_msm_blotted)
 
-            #print(sum(tpm[states_in_order.index(i)]))
-    #print(save_period/rate_ab)
-
-
-
-
-
-
-
-
-    # mfpts = np.zeros([nm])
-
-    # for ms in range(1):
-    #     for i, md in enumerate(macrostates_discrete):
-    #         if md == ms:
-    #             print("-----------------------------------------------------------")
-    #             print(len(bincenters)*2)
-    #             print(tpm.shape)
-
+            eqp_init_macrostate = sum([eqpj[0] if macrostates_discrete[states_in_order[j] // nm] == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)])
             
 
-    #             mfpts[0] += np.dot(ha_eqp_config, tpm[i])
+            rate /= eqp_init_macrostate
 
+            mfpts[target_ms][starting_ms] = save_period/rate
 
-
-#macrostates_discrete: coord index to macrostate
-#
+    return mfpts
