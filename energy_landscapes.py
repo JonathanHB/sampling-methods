@@ -129,7 +129,7 @@ class unit_sine_well(potential_well_1d):
 
 
 #compare true and estimated energy landscapes
-def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = []):
+def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = [], ensemble_data = []):
 
     #compute true populations 
     eq_pops_analytic, energies_analytic = system.normalized_pops_energies(kT, coordinates)
@@ -140,6 +140,11 @@ def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = 
     
     plt.plot(coordinates, eq_pops_analytic, linestyle="dashed")
     plt.plot(coordinates, eq_pops_simulation)
+
+    #plot energy landscapes for each ensemble of a history augmented MSM if provided
+    if ensemble_data:
+        for xei, xpi in zip(ensemble_data[0], ensemble_data[1]):
+            plt.plot(xei, xpi)
     
     plt.show()
 
@@ -168,4 +173,9 @@ def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = 
     #print(f"kl divergence = {kl_divergence}")
 
 
-    
+def print_mfpts_2states(mfpts):
+    inter_well_mpfts = [mfpts[0,1], mfpts[1,0]]
+
+    meanfmt = f"{np.mean(inter_well_mpfts):.2f}"
+    stdfmt = f"{np.std(inter_well_mpfts):.2f}"
+    print(f"MFPT = {meanfmt}+-{stdfmt} steps")

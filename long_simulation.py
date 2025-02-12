@@ -19,7 +19,6 @@ def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nste
 
 
 def get_bin_boundaries(trj_flat, nbins, binrange = [], symmetric = True):
-    #set bin boundaries
 
     if binrange == []:
 
@@ -45,7 +44,6 @@ def get_bin_boundaries(trj_flat, nbins, binrange = [], symmetric = True):
 
 def estimate_energy_landscape_histogram(trjs, kT, nbins, binrange = [], symmetric = True):
     
-
     #flatten trajectory since the order of the frames does not matter here
     trj_flat = trjs.flatten()
 
@@ -153,7 +151,7 @@ def msm_analysis(trjs, kT, nbins, macrostate_classifier, n_macrostates, save_per
     x_msm = [bincenters[i] for i in states_in_order]
 
     #------------------------------------------------------------------------
-    #this part should be abstracted out into MSM_methods
+    #this part should be abstracted out into MSM_methods but is probably also slightly wrong; the haMSM formulation should be used instead
     msm_state_macrostates = [macrostate_classifier(x) for x in x_msm]
 
     mfpts = np.zeros([n_macrostates, n_macrostates])
@@ -212,7 +210,7 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
 
     #-----------------------------------------------------------------------------------------------------------------
-    #get a list of history augmented transitions from a list of parallel trajectories
+    #get a list of history augmented transitions from a list of parallel trajectories; make this its own method
     transitions = []
 
     for trj in trjs_discrete:
@@ -253,54 +251,31 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
     #-----------------------------------------------------------------------------------------------------------------
     #get populations in configuration space (along x) for each ensemble
-    #TODO generalize to n macrostates
 
-    p_msm_a = []
-    x_msm_a = []
-    p_msm_b = []
-    x_msm_b = []
+    x_ensembles = [[] for element in range(nm)]
+    p_ensembles = [[] for element in range(nm)]
 
     for i, so in enumerate(states_in_order):
-        if so%2 == 0:
-            x_msm_a.append(bincenters[int(so//2)])
-            p_msm_a.append(eqp_msm[i])
-        else:
-            x_msm_b.append(bincenters[int(so//2)])
-            p_msm_b.append(eqp_msm[i])
-
-    #x_msm = [bincenters[i] for i in states_in_order]
-
-    plt.plot(x_msm_a, p_msm_a)
-    plt.plot(x_msm_b, p_msm_b)
+        for j in range(nm):
+            if so%nm == j:
+                x_ensembles[j].append(bincenters[int(so//nm)])
+                p_ensembles[j].append(eqp_msm[i][0])
 
 
     #-----------------------------------------------------------------------------------------------------------------
     #assemble halves of the energy landscape to get the overall energy
-    #TODO generalize to n macrostates
 
     ha_sio_config = []
     ha_eqp_config = []
     
     for i in range(0, len(bincenters)*2, 2):
         
-        config_state_prob = 0
-        
-        if i in states_in_order:
-            config_state_prob += eqp_msm[states_in_order.index(i)][0]
-        if i+1 in states_in_order:
-            config_state_prob += eqp_msm[states_in_order.index(i+1)][0]
-        
         ha_sio_config.append(bincenters[int(i/2)])
-        ha_eqp_config.append(config_state_prob)
-
-    plt.plot(ha_sio_config, ha_eqp_config)
+        ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
 
 
     #-----------------------------------------------------------------------------------------------------------------
-    #calculate mfpts
-
-    target_ms = 1
-    starting_ms = 0
+    #calculate mfpts; move to MSM section
 
     mfpts = np.zeros([nm, nm])
 
@@ -329,4 +304,5 @@ def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], 
 
             mfpts[target_ms][starting_ms] = save_period/rate
 
-    return mfpts
+
+    return ha_sio_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
