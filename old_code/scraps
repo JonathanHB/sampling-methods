@@ -1,0 +1,13 @@
+import numpy as np
+
+#unused; deprecated
+def propagate(trj_coords, system, kT, timestep, nsteps):
+
+    D = system.diffusion_coefficient()
+    
+    B = lambda x : x + D/kT * system.F(x) * timestep + np.sqrt(2*D*timestep)*np.random.normal()
+    
+    for step in range(nsteps):
+        trj_coords = list(map(B, trj_coords))
+
+    return trj_coords

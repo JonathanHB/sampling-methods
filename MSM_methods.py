@@ -164,3 +164,83 @@ maximum fractional error of any component = {maxerror}")
         print("error: nonzero complex components detected")
         
     return np.real(eig0c)
+
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+#                                        Mean first passage time calculations
+#-----------------------------------------------------------------------------------------------------------------------
+
+#non-history-augmented and is probably also slightly wrong; the haMSM formulation should be used instead
+def calc_MFPT(tpm, x_msm, eqp_msm_init, macrostate_classifier, n_macrostates, lag_time, save_period):
+    
+    msm_state_macrostates = [macrostate_classifier(x) for x in x_msm]
+
+    mfpts = np.zeros([n_macrostates, n_macrostates])
+
+    #calculate MFPT into each destination macrostate
+    for mf in range(n_macrostates):
+        transitions_blotted = np.array(tpm)
+        for si, s in enumerate(msm_state_macrostates):
+            if s == mf:
+                transitions_blotted[si,:] = 0
+                #transitions_blotted[si,si] = 1
+
+        #plt.matshow(transitions_blotted)
+        #plt.show()
+        #print(transitions_blotted)
+
+        for mi in range(n_macrostates):
+            if mi != mf:
+                #print(msm_state_macrostates)
+                #print()
+                eqp_msm = np.array([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm_init)]).reshape([len(eqp_msm_init), 1])
+                #for s, si in enumerate(msm_state_macrostates):
+
+                rate_per_unit = []
+                p_t = [np.sum(eqp_msm)]
+                for t in range(500):
+                    eqp_msm = np.matmul(transitions_blotted, eqp_msm)
+                    p_t.append(np.sum(eqp_msm))
+
+                    #calculate how much probability is left in the initial macrostate
+                    prob_in_init = sum([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm)]) #there's a faster way of doing this
+                    rate_per_unit.append((p_t[-2]-p_t[-1])/prob_in_init)
+
+                mfpts[mf][mi] = save_period*lag_time/rate_per_unit[-1]
+                #plt.plot(rate_per_unit)
+                #plt.show()
+
+    return mfpts
+
+
+#calculate MFPTS from history augmented MSMs; more accurate than the method above
+def calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period):
+
+    mfpts = np.zeros([nm, nm])
+
+    for target_ms in range(nm):
+        for starting_ms in range(nm):
+
+            rate = 0
+
+            #equilibrium probabilities for the ensemble starting in macrostate 0 (the non-target macrostate) only
+            eqp_msm_blotted = [eqpj[0] if states_in_order[j] % nm == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)]
+
+            #csi = connected state index
+            #fsi = full state index (in the n_macrostates*n_config_states state space)
+            for csi, fsi in enumerate(states_in_order):
+                if macrostates_discrete[fsi // nm] == target_ms:
+
+                    #this is a row of transition probabilities going from all macrostates to the target
+                    tpm_row_to_target = tpm[csi]
+
+                    rate += np.dot(tpm_row_to_target, eqp_msm_blotted)
+
+            eqp_init_macrostate = sum([eqpj[0] if macrostates_discrete[states_in_order[j] // nm] == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)])
+
+            rate /= eqp_init_macrostate
+
+            mfpts[target_ms][starting_ms] = save_period/rate
+
+    return mfpts

@@ -246,6 +246,7 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrang
                         ha_binning=False)
 
 
+
 def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_trans_by_round, t, n_macrostates, potential_func, macrostate_classifier, kT):
     
     binwidth = (binbounds[-1]-binbounds[0])/len(binbounds)
