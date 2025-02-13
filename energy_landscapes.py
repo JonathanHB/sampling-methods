@@ -101,7 +101,7 @@ class unit_sine_well(potential_well_1d):
         return 0.0001*x**4 + np.cos(x)
         
     def F(self, x):
-        return 0.0001*-4*x**3 - np.sin(x)
+        return 0.0001*-4*x**3 + np.sin(x)
 
     #for visualization to check that you've written the potential right
     def plot_quantity(self, quantity): 
