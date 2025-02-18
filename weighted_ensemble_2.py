@@ -1,5 +1,7 @@
 #Method for running weighted ensemble
 
+#IDEA: can populate bins by resuming previously-terminated walkers, especially deeply-branching ones; could include these 'ghost' walkers in RMSD comparisons as well
+
 import numpy as np
 import random
 import sys

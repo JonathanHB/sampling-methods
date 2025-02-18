@@ -11,3 +11,27 @@ def propagate(trj_coords, system, kT, timestep, nsteps):
         trj_coords = list(map(B, trj_coords))
 
     return trj_coords
+
+
+# def get_bin_boundaries(trj_flat, nbins, binrange = [], symmetric = True):
+
+#     if binrange == []:
+
+#         epsilon = 10**-9 #to avoid any >= vs > issues at bin boundaries
+#         if symmetric:    
+#             bin_extreme = max(np.max(trj_flat), -np.min(trj_flat))
+#             bin_min = -bin_extreme-epsilon
+#             bin_max = bin_extreme+epsilon
+#         else:
+#             bin_min = np.min(trj_flat)-epsilon
+#             bin_max = np.max(trj_flat)+epsilon
+#     else:
+#         bin_min = binrange[0]
+#         bin_max = binrange[1]
+
+#     step = (bin_max-bin_min)/nbins
+    
+#     binbounds = np.linspace(bin_min, bin_max, nbins+1)
+#     bincenters = np.linspace(bin_min-step/2, bin_max+step/2, nbins+2)
+
+#     return binbounds, bincenters, step

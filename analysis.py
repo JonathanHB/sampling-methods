@@ -1,4 +1,5 @@
 import numpy as np
+import MSM_methods
 import matplotlib.pyplot as plt
 
 
@@ -54,3 +55,58 @@ def print_mfpts_2states(mfpts, digits = 0):
     meanfmt = f"{np.mean(inter_well_mpfts):.{digits}f}"
     stdfmt = f"{np.std(inter_well_mpfts):.{digits}f}"
     print(f"MFPT = {meanfmt}+-{stdfmt} steps")
+
+
+
+def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_TPM=False):
+
+    #for consiceness
+    nm = system.n_macrostates
+
+    #get bin boundaries
+    binbounds, bincenters, step = system.analysis_bins(nbins)
+
+    #assign the bins to macrostates
+    macrostates_discrete = [system.macro_class(x) for x in bincenters]
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #build MSM
+    tpm, states_in_order = MSM_methods.transitions_2_msm(ha_transitions)
+    if show_TPM:
+        plt.matshow(tpm)
+        plt.show()
+
+    eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
+
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #get populations in configuration space (along x) for each ensemble
+
+    x_ensembles = [[] for element in range(nm)]
+    p_ensembles = [[] for element in range(nm)]
+
+    for i, so in enumerate(states_in_order):
+        for j in range(nm):
+            if so%nm == j:
+                x_ensembles[j].append(bincenters[int(so//nm)])
+                p_ensembles[j].append(eqp_msm[i][0])
+
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #assemble halves of the energy landscape to get the overall energy
+
+    ha_sio_config = []
+    ha_eqp_config = []
+    
+    for i in range(0, len(bincenters)*2, 2):
+        
+        ha_sio_config.append(bincenters[int(i/2)])
+        ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
+
+
+    #-----------------------------------------------------------------------------------------------------------------
+    #calculate mfpts
+    mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period)
+
+
+    return ha_sio_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts

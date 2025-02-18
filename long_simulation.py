@@ -19,39 +19,14 @@ def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nste
 
 
 
-def get_bin_boundaries(trj_flat, nbins, binrange = [], symmetric = True):
-
-    if binrange == []:
-
-        epsilon = 10**-9 #to avoid any >= vs > issues at bin boundaries
-        if symmetric:    
-            bin_extreme = max(np.max(trj_flat), -np.min(trj_flat))
-            bin_min = -bin_extreme-epsilon
-            bin_max = bin_extreme+epsilon
-        else:
-            bin_min = np.min(trj_flat)-epsilon
-            bin_max = np.max(trj_flat)+epsilon
-    else:
-        bin_min = binrange[0]
-        bin_max = binrange[1]
-
-    step = (bin_max-bin_min)/nbins
-    
-    binbounds = np.linspace(bin_min, bin_max, nbins+1)
-    bincenters = np.linspace(bin_min-step/2, bin_max+step/2, nbins+2)
-
-    return binbounds, bincenters, step
-
-
-
-def estimate_eq_pops_histogram(trjs, nbins, binrange = [], symmetric = True):
+def estimate_eq_pops_histogram(trjs, system, nbins):
     
     #flatten trajectory since the order of the frames does not matter here
     trj_flat = trjs.flatten()
 
     #-------define bins--------------------------------------------------------------------
 
-    binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
+    binbounds, bincenters, step = system.analysis_bins(nbins)
 
     #-------bin trajectory--------------------------------------------------------------------
 
@@ -103,11 +78,11 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
 
 
 
-def msm_analysis(trjs, nbins, macrostate_classifier, n_macrostates, save_period, lag_time=1, binrange = [], symmetric = True, show_TPM=False):
+def msm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
 
     #get bin boundaries
     trj_flat = trjs.flatten()
-    binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
+    binbounds, bincenters, step = system.analysis_bins(nbins)
 
     #-------build MSM--------------------------------------------------------
 
@@ -126,14 +101,14 @@ def msm_analysis(trjs, nbins, macrostate_classifier, n_macrostates, save_period,
     # this approach is going to be slightly wrong since it achieves only an approximate steady state, but it the steady state at least appears to be quite stable.
     # history augmented MSMs should be used instead anyway. See below for the implementation
 
-    mfpts = MSM_methods.calc_MFPT(tpm, x_msm, eqp_msm_init, macrostate_classifier, n_macrostates, lag_time, save_period)
+    mfpts = MSM_methods.calc_MFPT(tpm, x_msm, eqp_msm_init, system.macrostate_classifier, system.n_macrostates, lag_time, save_period)
 
     return x_msm, eqp_msm_init, mfpts
 
 
 
 #get a list of history augmented transitions from a list of parallel trajectories
-def get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag_time):
+def __get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag_time):
 
     transitions = []
 
@@ -166,62 +141,76 @@ def get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag_t
 
 
 
-#calculate mean first passage time from long trajectories
-def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, binrange = [], symmetric = True, show_TPM=False):
-
-    #for consiceness
-    nm = system.n_macrostates()
+def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
     #get bin boundaries
-    trj_flat = trjs.flatten()
-    binbounds, bincenters, step = get_bin_boundaries(trj_flat, nbins, binrange, symmetric)
+    binbounds, bincenters, step = system.analysis_bins(nbins)
 
     #bin trajectories in configurational space and assign the bins to macrostates
     trjs_discrete = np.digitize(trjs, bins = binbounds).transpose()
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
     #get a list of all the transitions
-    ha_transitions = get_ha_transitions(trjs_discrete, macrostates_discrete, nm, lag_time)
+    ha_transitions = __get_ha_transitions(trjs_discrete, macrostates_discrete, system.n_macrostates, lag_time)
+
+    return ha_transitions
 
 
-    #-----------------------------------------------------------------------------------------------------------------
-    #build MSM
-    tpm, states_in_order = MSM_methods.transitions_2_msm(ha_transitions)
-    if show_TPM:
-        plt.matshow(tpm)
-        plt.show()
+# #put this into analysis methods and have it take the transitions as an argument
+# def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
 
-    eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
+#     #for consiceness
+#     nm = system.n_macrostates
 
+#     #get bin boundaries
+#     binbounds, bincenters, step = system.analysis_bins(nbins)
 
-    #-----------------------------------------------------------------------------------------------------------------
-    #get populations in configuration space (along x) for each ensemble
+#     #bin trajectories in configurational space and assign the bins to macrostates
+#     trjs_discrete = np.digitize(trjs, bins = binbounds).transpose()
+#     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
-    x_ensembles = [[] for element in range(nm)]
-    p_ensembles = [[] for element in range(nm)]
-
-    for i, so in enumerate(states_in_order):
-        for j in range(nm):
-            if so%nm == j:
-                x_ensembles[j].append(bincenters[int(so//nm)])
-                p_ensembles[j].append(eqp_msm[i][0])
+#     #get a list of all the transitions
+#     ha_transitions = get_ha_transitions(trjs_discrete, macrostates_discrete, nm, lag_time)
 
 
-    #-----------------------------------------------------------------------------------------------------------------
-    #assemble halves of the energy landscape to get the overall energy
+#     #-----------------------------------------------------------------------------------------------------------------
+#     #build MSM
+#     tpm, states_in_order = MSM_methods.transitions_2_msm(ha_transitions)
+#     if show_TPM:
+#         plt.matshow(tpm)
+#         plt.show()
 
-    ha_sio_config = []
-    ha_eqp_config = []
+#     eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
+
+
+#     #-----------------------------------------------------------------------------------------------------------------
+#     #get populations in configuration space (along x) for each ensemble
+
+#     x_ensembles = [[] for element in range(nm)]
+#     p_ensembles = [[] for element in range(nm)]
+
+#     for i, so in enumerate(states_in_order):
+#         for j in range(nm):
+#             if so%nm == j:
+#                 x_ensembles[j].append(bincenters[int(so//nm)])
+#                 p_ensembles[j].append(eqp_msm[i][0])
+
+
+#     #-----------------------------------------------------------------------------------------------------------------
+#     #assemble halves of the energy landscape to get the overall energy
+
+#     ha_sio_config = []
+#     ha_eqp_config = []
     
-    for i in range(0, len(bincenters)*2, 2):
+#     for i in range(0, len(bincenters)*2, 2):
         
-        ha_sio_config.append(bincenters[int(i/2)])
-        ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
+#         ha_sio_config.append(bincenters[int(i/2)])
+#         ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
 
 
-    #-----------------------------------------------------------------------------------------------------------------
-    #calculate mfpts
-    mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period)
+#     #-----------------------------------------------------------------------------------------------------------------
+#     #calculate mfpts
+#     mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period)
 
 
-    return ha_sio_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
+#     return ha_sio_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts

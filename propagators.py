@@ -19,7 +19,7 @@ import numpy as np
 def propagate(system, kT, trj_coords, timestep, nsteps, save_period):
   
     nd = np.array(trj_coords.shape)   
-    D = system.diffusion_coefficient()
+    D = system.diffusion_coefficient
     
     trj_out = []
     for i in range(int(nsteps/save_period)):
@@ -37,7 +37,7 @@ def propagate(system, kT, trj_coords, timestep, nsteps, save_period):
 def propagate_save1(system, kT, trj_coords, timestep, nsteps):
   
     nd = np.array(trj_coords.shape)   
-    D = system.diffusion_coefficient()
+    D = system.diffusion_coefficient
     
     for step in range(nsteps):
         trj_coords += D/kT * system.F(trj_coords) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)

@@ -4,9 +4,10 @@ import matplotlib.pyplot as plt
 #superclass of 1d potential functions
 class potential_well_1d():
 
-    def __init__(self, potential, macro_class):
+    def __init__(self, potential, macro_class, standard_analysis_range):
         self.potentiall = potential
         self.macro_classs = macro_class
+        self.standard_analysis_rangee = standard_analysis_range
 
     def ensemble_class(self, x, e):  
         ms = self.macro_classs(x)
@@ -58,26 +59,34 @@ class potential_well_1d():
         bin_populations = [bp/z for bp in bin_populations]
         
         return bin_centers, bin_populations
+    
+    #for visualization to check that you've written the potential right
+    def plot_quantity(self, quantity): 
+        x = np.linspace(self.standard_analysis_rangee[0], self.standard_analysis_rangee[1], 100)
+        plt.plot(x, [quantity(i) for i in x])
+
+    #return bins for analysis of each energy landscape
+    def analysis_bins(self, nbins):
+        
+        step = (self.standard_analysis_rangee[1]-self.standard_analysis_rangee[0])/nbins
+    
+        binbounds = np.linspace(self.standard_analysis_rangee[0], self.standard_analysis_rangee[1], nbins+1)
+        bincenters = np.linspace(self.standard_analysis_rangee[0]-step/2, self.standard_analysis_rangee[1]+step/2, nbins+2)
+
+        return binbounds, bincenters, step
 
 
 class unit_double_well(potential_well_1d):
+    #MFPT(10 frame save frequency) = ~800 steps
 
     def potential(self, x):
         return x**4 - x**2
         
     def F(self, x):
         return -4*x**3 + 2*x
-
-    #for visualization to check that you've written the potential right
-    def plot_quantity(self, quantity):
-        x_extr = 1.5
-        plt.plot(np.linspace(-x_extr, x_extr, 100), [quantity(i) for i in np.linspace(-x_extr, x_extr, 100)])
-
-    def diffusion_coefficient(self):
-        return 1
     
     def macro_class(self, x):
-        thr = 1/np.sqrt(2)
+        thr = 0.7 #1/np.sqrt(2)
         if x <= -thr:
             return 0
         elif x >= thr:
@@ -85,31 +94,22 @@ class unit_double_well(potential_well_1d):
         else:
             return -1
             
-    def n_macrostates(self):
-        return 2
-    
-    def standard_init_coord(self):
-        return -1/np.sqrt(2) 
-
     def __init__(self):
-        super().__init__(self.potential, self.macro_class)
+        self.diffusion_coefficient = 1
+        self.n_macrostates = 2
+        self.standard_init_coord = -0.7#-1/np.sqrt(2) 
+        self.standard_analysis_range = [-2,2]
+        super().__init__(self.potential, self.macro_class, self.standard_analysis_range)
 
 
 class unit_sine_well(potential_well_1d):
+    #MFPT(10 frame save frequency) = ~70000 steps
 
     def potential(self, x):
         return 0.0001*x**4 + np.cos(x)
         
     def F(self, x):
         return 0.0001*-4*x**3 + np.sin(x)
-
-    #for visualization to check that you've written the potential right
-    def plot_quantity(self, quantity): 
-        x_extr = 20
-        plt.plot(np.linspace(-x_extr, x_extr, 100), [quantity(i) for i in np.linspace(-x_extr, x_extr, 100)])
-
-    def diffusion_coefficient(self):
-        return 1
     
     def macro_class(self, x):
         thr = 2*np.pi
@@ -119,13 +119,11 @@ class unit_sine_well(potential_well_1d):
             return 1
         else:
             return -1
-            
-    def n_macrostates(self):
-        return 2
-    
-    def standard_init_coord(self):
-        return -3*np.pi
-
+        
     def __init__(self):
-        super().__init__(self.potential, self.macro_class)
+        self.diffusion_coefficient = 1
+        self.n_macrostates = 2
+        self.standard_init_coord = -3*np.pi 
+        self.standard_analysis_range = [-20,20]
+        super().__init__(self.potential, self.macro_class, self.standard_analysis_range)
 
