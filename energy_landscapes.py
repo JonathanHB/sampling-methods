@@ -1,7 +1,21 @@
+#energy_landscapes.py
+#Jonathan Borowsky
+#2/21/25
+
+#classes representing different systems to be simulated
+#these provide energy landscapes, forces, diffusion coefficients,
+# kinetically appropriate macrostate definitions,
+# and convenient fixed equal width bins and starting coordinates
+
+################################################################################################################
+
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 #superclass of 1d potential functions
+#this contains all the functions which are useful for a system object to have 
+# and for which the structure of the algorithm does not depend on the potential or other details of the system
 class potential_well_1d():
 
     def __init__(self, potential, macro_class, standard_analysis_range):
@@ -9,6 +23,7 @@ class potential_well_1d():
         self.macro_classs = macro_class
         self.standard_analysis_rangee = standard_analysis_range
 
+    #determine which ensemble a trajectory currently ensemble e should be in upon moving to coordinate x
     def ensemble_class(self, x, e):  
         ms = self.macro_classs(x)
         if ms != -1:
@@ -16,6 +31,11 @@ class potential_well_1d():
         else:
             return e
 
+    #calculate equilibrium populations and energies for a given set of bins
+    # by assuming energy is roughly constant across each bin
+    # This is a good approximation for most systems; 
+    # if your bins are too large for it to hold it's usually a good idea to make them smaller 
+    # instead of integrating across them with the method below
     def normalized_pops_energies(self, kT, bincenters):
         #assume equal bin widths
         binwidth = bincenters[1]-bincenters[0]
@@ -65,7 +85,8 @@ class potential_well_1d():
         x = np.linspace(self.standard_analysis_rangee[0], self.standard_analysis_rangee[1], 100)
         plt.plot(x, [quantity(i) for i in x])
 
-    #return bins for analysis of each energy landscape
+    #return bins for analysis of each energy landscape, 
+    # including end bins for anything outside the standard bin range
     def analysis_bins(self, nbins):
         
         step = (self.standard_analysis_rangee[1]-self.standard_analysis_rangee[0])/nbins
@@ -76,6 +97,7 @@ class potential_well_1d():
         return binbounds, bincenters, step
 
 
+#a double well constructed using a quartic and quadratic potential
 class unit_double_well(potential_well_1d):
     #MFPT(10 frame save frequency) = ~800 steps
 
@@ -102,6 +124,7 @@ class unit_double_well(potential_well_1d):
         super().__init__(self.potential, self.macro_class, self.standard_analysis_range)
 
 
+#a system of several wells of similar energies constructed using a sinusoidal and a quartic potential
 class unit_sine_well(potential_well_1d):
     #MFPT(10 frame save frequency) = ~70000 steps
 

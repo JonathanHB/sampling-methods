@@ -1,11 +1,35 @@
+#long_simulations.py
+#Jonathan Borowsky
+#2/21/25
+
+#functions for running and analyzing long simulations
+# to obtain unbiased estimates of equilibrium populations and kinetics 
+# to compare adaptive sampling methods against
+
+################################################################################################################
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import MSM_methods
 
+
+#---------------------------------------------------------------------------------
+#run a set of parallel simulations
+
+#parameters:
+# propagator: integrator that generates the trajectory
+# system: system object that contains the potential energy and force functions
+# kT: temperature at which to simulate
+# x_init_coord: initial coordinates for the system
+# dt: time step for the simulation
+# nsteps: number of steps for which to run the simulation
+# save_period: how often to save trajectory frames
+# n_parallel: number of parallel simulations to run
+
+# returns: a set of trajectories, one for each parallel simulation
+
 def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel):
-    
-    #---------------------------------------------------------------
-    #run n_parallel long simulations
     
     #set initial positions
     x_init = np.array([x_init_coord for element in range(n_parallel)])
@@ -18,17 +42,28 @@ def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nste
     return np.concatenate((x_init_2.reshape(1,n_parallel), long_trjs)) 
 
 
+#---------------------------------------------------------------------------------
+#estimate the equilibrium populations from a set of parallel trajectories by counting up where the system spends its time
+#parameters:
+# trjs: a set of parallel trajectories
+# system: system object that contains the potential energy and force functions
+# nbins: number of bins to use for the histogram
+
+# returns: 
+# bincenters: the centers of the bins for which the equilibrium populations are calculated
+# eq_pops: the equilibrium populations for each bin
+# note that the first and last bins extend to -inf and inf respectively, 
+#   but the bin centers are placed as if they were spaced equally to the other bins
 
 def estimate_eq_pops_histogram(trjs, system, nbins):
     
     #flatten trajectory since the order of the frames does not matter here
     trj_flat = trjs.flatten()
 
-    #-------define bins--------------------------------------------------------------------
-
+    # define bins
     binbounds, bincenters, step = system.analysis_bins(nbins)
 
-    #-------bin trajectory--------------------------------------------------------------------
+    #bin trajectory
 
     #note that digitize reserves the index 0 for entries below the first bin, 
     # but in this case the bins have been constructed so that all entries lie within the explicit bin range
@@ -42,8 +77,25 @@ def estimate_eq_pops_histogram(trjs, system, nbins):
     return bincenters, eq_pops
 
 
+#---------------------------------------------------------------------------------
+#estimate the mean first passage time between macrostates from a set of parallel trajectories
+#  by counting the macrostate transitions
 
-#calculate mean first passage time from long trajectories
+#parameters:
+# macrostate_classifier: function that takes in a coordinate and returns the macrostate index
+#   or -1 if the coordinate is in no macrostate
+#   note that the non-macrostate region is not usually equivalent to an additional macrostate because 
+#   transitions between macrostates should be much slower than those within them
+#   and the non-macrostate region is usually a high energy region with a convex energy profile for which this is not true
+# n_macrostates: number of macrostates
+# save_period: the number of steps between trajectory frames
+# trajectories: a list of parallel trajectories
+
+#returns:
+# n_transitions: a matrix of the number of transitions between macrostates
+# mfpts: a matrix of the mean first passage times between macrostates, in units of integrator steps
+#   the mfpt from macrostate i to j is given by mfpts[j][i]; same indexing for transition counts
+
 def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
 
     n_transitions = np.zeros([n_macrostates, n_macrostates])
@@ -77,7 +129,9 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
     return n_transitions, mfpts
 
 
-
+#---------------------------------------------------------------------------------
+#DEPRECATED
+#regular MSM analysis, should be broken into a get_transitions() method here and an msm_anslysis() method in analysis.py
 def msm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
 
     #get bin boundaries
@@ -106,8 +160,22 @@ def msm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
     return x_msm, eqp_msm_init, mfpts
 
 
-
+#---------------------------------------------------------------------------------
 #get a list of history augmented transitions from a list of parallel trajectories
+
+#parameters:
+# trjs_discrete: a list of parallel trajectories, each trajectory is a list of the bin index of the trajectory frame
+# macrostates_discrete: a list of the macrostate index for each bin center
+# n_macrostates: the number of macrostates
+# lag_time: the number of frames over which to look for transitions
+#    note that overlapping segments of n_frames are used, 
+#    so the transitions are not independent at lag times greater than 1
+#    I do not know if it is a problem if this lag time differs from that used to build the haMSM
+
+#returns:
+# transitions: a list of transitions, each transition is a list of the form [start state, end state]
+#   where the start and end states are given by the configurational bin index of the trajectory frame 
+#   multiplied by the number of macrostates, plus the ensemble index
 def __get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag_time):
 
     transitions = []
@@ -140,7 +208,23 @@ def __get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag
     return transitions
 
 
+#---------------------------------------------------------------------------------
+# wrapper function for __get_ha_transitions()
+# get a list of history augmented transitions from a list of parallel trajectories
 
+#parameters:
+# trjs: a list of parallel trajectories
+# nbins: the number of configurational bins to use
+# system: system object that contains the macrostate classifier and information on the number of macrostates
+# lag_time: the number of frames over which to look for transitions
+#    note that overlapping segments of n_frames are used, 
+#    so the transitions are not independent at lag times greater than 1
+#    I do not know if it is a problem if this lag time differs from that used to build the haMSM
+
+#returns:
+# ha_transitions: a list of transitions, each transition is a list of the form [start state, end state]
+#   where the start and end states are given by the configurational bin index of the trajectory frame 
+#   multiplied by the number of macrostates, plus the ensemble index
 def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
     #get bin boundaries
@@ -155,62 +239,3 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
     return ha_transitions
 
-
-# #put this into analysis methods and have it take the transitions as an argument
-# def hamsm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
-
-#     #for consiceness
-#     nm = system.n_macrostates
-
-#     #get bin boundaries
-#     binbounds, bincenters, step = system.analysis_bins(nbins)
-
-#     #bin trajectories in configurational space and assign the bins to macrostates
-#     trjs_discrete = np.digitize(trjs, bins = binbounds).transpose()
-#     macrostates_discrete = [system.macro_class(x) for x in bincenters]
-
-#     #get a list of all the transitions
-#     ha_transitions = get_ha_transitions(trjs_discrete, macrostates_discrete, nm, lag_time)
-
-
-#     #-----------------------------------------------------------------------------------------------------------------
-#     #build MSM
-#     tpm, states_in_order = MSM_methods.transitions_2_msm(ha_transitions)
-#     if show_TPM:
-#         plt.matshow(tpm)
-#         plt.show()
-
-#     eqp_msm = MSM_methods.tpm_2_eqprobs(tpm)
-
-
-#     #-----------------------------------------------------------------------------------------------------------------
-#     #get populations in configuration space (along x) for each ensemble
-
-#     x_ensembles = [[] for element in range(nm)]
-#     p_ensembles = [[] for element in range(nm)]
-
-#     for i, so in enumerate(states_in_order):
-#         for j in range(nm):
-#             if so%nm == j:
-#                 x_ensembles[j].append(bincenters[int(so//nm)])
-#                 p_ensembles[j].append(eqp_msm[i][0])
-
-
-#     #-----------------------------------------------------------------------------------------------------------------
-#     #assemble halves of the energy landscape to get the overall energy
-
-#     ha_sio_config = []
-#     ha_eqp_config = []
-    
-#     for i in range(0, len(bincenters)*2, 2):
-        
-#         ha_sio_config.append(bincenters[int(i/2)])
-#         ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
-
-
-#     #-----------------------------------------------------------------------------------------------------------------
-#     #calculate mfpts
-#     mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period)
-
-
-#     return ha_sio_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts

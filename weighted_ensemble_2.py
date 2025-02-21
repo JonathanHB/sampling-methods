@@ -227,6 +227,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
     return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round
 
 
+#wrapper function for weighted_ensemble() that initializes the walkers
 def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrange, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
 
     #start 1 bin worth of walkers at x_init_val with equal weights
@@ -248,27 +249,3 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrang
                         ha_binning=False)
 
 
-
-def landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_trans_by_round, t, n_macrostates, potential_func, macrostate_classifier, kT):
-    
-    binwidth = (binbounds[-1]-binbounds[0])/len(binbounds)
-    bincenters = np.linspace(binbounds[0]-binwidth/2, binbounds[-1]+binwidth/2, len(binbounds)+1)
-    
-    #--------------------------------------------
-    #energy estimate from WE weights
-    xtrj_flat = [j for i in xtrj[0:t] for j in i ]
-    wtrj_flat = [j for i in wtrj[0:t] for j in i ]
-
-    binned_trj = np.digitize(xtrj_flat, bins = binbounds)
-
-    #+1 is for the end bins
-    binned_total_weights = np.zeros(len(binbounds)+1)
-    for i, b in enumerate(binned_trj):
-        binned_total_weights[b] += wtrj_flat[i]/t
-        
-    sampled_we_inds_energies = [[i, -np.log(wt/binwidth)] for i, wt in enumerate(binned_total_weights) if wt > 0]
-    sampled_we_bincenters = [bincenters[wie[0]] for wie in sampled_we_inds_energies]
-    sampled_we_energies = [wie[1] for wie in sampled_we_inds_energies]
-    
-    return bincenters, binned_total_weights, sampled_we_bincenters, sampled_we_energies
-    

@@ -1,19 +1,39 @@
+#MSM_methods.py
 #Jonathan Borowsky
-#1/31/25
-#fast row normalization based MSM construction methods; not as reliable as those in pyemma, which use fancier but slower bayesian estimators
+#2/21/25
+
+#fast row normalization based MSM construction methods
+# faster but less statistically rigorous than those in pyemma, which use bayesian estimators
+#see the deeptime package for up to date construction methods
+
+#################################################################################################################
 
 import numpy as np
 from sklearn.preprocessing import normalize
 from scipy.sparse.csgraph import connected_components
 
+#-----------------------------------------------------------------------------------------------------------------------
+#                                        MSM construction
+#-----------------------------------------------------------------------------------------------------------------------
+
+
+#----------------------------------------------------------------------------------------------------------------
+# construct an MSM from a list of transitions
+
+#parameters
+# transitions: a list of transitions, each of which is a tuple of (start state, end state)
+
+#returns
+# tpm: the transition probability matrix
+# states_in_order: the original state number of each state in the MSM; needed because some states are removed by ergodic trimming
+#    states_in_order[i] = the original state number of the i-th state in the MSM
+
 def transitions_2_msm(transitions):
     
     #-----------------------------------------
     #ergodic trimming
-    
-#     if source_sink_trimming:
 
-    #actually untrimmed; used to check if no states are removed on the first trimming
+    #initially untrimmed; used to check if no states are removed on the first trimming
     last_trimmed_state_list = set(np.unique(transitions)) 
 
     for i in range(999):
@@ -38,9 +58,6 @@ def transitions_2_msm(transitions):
     #sort states
     states_in_order = sorted(trimmed_state_list)
 
-#     else:
-#         states_in_order = sorted(np.unique(transitions))
-
     #-----------------------------------------
     #construct transition count matrix
 
@@ -49,6 +66,7 @@ def transitions_2_msm(transitions):
     #for mapping configurational (or history-augmented) bins to MSM states
     state_to_ind = dict(zip(states_in_order, [i for i in range(n_states)]))
     
+    #count transitions
     transition_counts = np.zeros((n_states, n_states))
     
     for tr in transitions:
@@ -89,14 +107,19 @@ def transitions_2_msm(transitions):
     # so that the probability associated with each element of X(t) is preserved 
     # (though not all at one index) when X(t) is multiplied by the TPM
     tpm = normalize(transition_counts, axis=0, norm='l1')
-    
-#     plt.matshow(tpm)
-#     plt.show()
+
     
     return tpm, states_in_order
 
 
+#----------------------------------------------------------------------------------------------------------------
 #calculate equilibrium probabilities from MSM transition probability matrix
+
+#parameters
+# msm_tpm: the transition probability matrix of the MSM
+
+#returns
+# eqp_msm: the equilibrium probabilities of each state in the MSM
 
 def tpm_2_eqprobs(msm_tpm):
 
@@ -171,52 +194,29 @@ maximum fractional error of any component = {maxerror}")
 #                                        Mean first passage time calculations
 #-----------------------------------------------------------------------------------------------------------------------
 
-#non-history-augmented and is probably also slightly wrong; the haMSM formulation should be used instead
-def calc_MFPT(tpm, x_msm, eqp_msm_init, macrostate_classifier, n_macrostates, lag_time, save_period):
-    
-    msm_state_macrostates = [macrostate_classifier(x) for x in x_msm]
 
-    mfpts = np.zeros([n_macrostates, n_macrostates])
+#----------------------------------------------------------------------------------------------------------------
+#calculate MFPTS from history augmented MSMs
 
-    #calculate MFPT into each destination macrostate
-    for mf in range(n_macrostates):
-        transitions_blotted = np.array(tpm)
-        for si, s in enumerate(msm_state_macrostates):
-            if s == mf:
-                transitions_blotted[si,:] = 0
-                #transitions_blotted[si,si] = 1
+#parameters
+# states_in_order: the original state number of each state in the MSM; needed because some states were removed by ergodic trimming
+#    states_in_order[i] = the original state number of the i-th state in the MSM
+# eqp_msm: the equilibrium probabilities of each state in the MSM
+# tpm: the transition probability matrix of the MSM
+# macrostates_discrete: the macrostate of each state in the MSM
+# nm: the number of macrostates
+# save_period: the number of time steps between frames
+#   (assumed to be equal to the lag time since haMSMs do not require
+#   a lag time sufficient for their microstates to be markovian)
 
-        #plt.matshow(transitions_blotted)
-        #plt.show()
-        #print(transitions_blotted)
+#returns
+# mfpts: a matrix of mean first passage times between the macrostates
+#   (the first index is the destination state and the second index is the starting state)
 
-        for mi in range(n_macrostates):
-            if mi != mf:
-                #print(msm_state_macrostates)
-                #print()
-                eqp_msm = np.array([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm_init)]).reshape([len(eqp_msm_init), 1])
-                #for s, si in enumerate(msm_state_macrostates):
-
-                rate_per_unit = []
-                p_t = [np.sum(eqp_msm)]
-                for t in range(500):
-                    eqp_msm = np.matmul(transitions_blotted, eqp_msm)
-                    p_t.append(np.sum(eqp_msm))
-
-                    #calculate how much probability is left in the initial macrostate
-                    prob_in_init = sum([eqpi[0] if msm_state_macrostates[i] == mi else 0 for i, eqpi in enumerate(eqp_msm)]) #there's a faster way of doing this
-                    rate_per_unit.append((p_t[-2]-p_t[-1])/prob_in_init)
-
-                mfpts[mf][mi] = save_period*lag_time/rate_per_unit[-1]
-                #plt.plot(rate_per_unit)
-                #plt.show()
-
-    return mfpts
-
-
-#calculate MFPTS from history augmented MSMs; more accurate than the method above
 def calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period):
 
+    #mean first passage times between each pair of states
+    # (the first index is the destination state and the second index is the starting state)
     mfpts = np.zeros([nm, nm])
 
     for target_ms in range(nm):
@@ -227,6 +227,10 @@ def calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_
             #equilibrium probabilities for the ensemble starting in macrostate 0 (the non-target macrostate) only
             eqp_msm_blotted = [eqpj[0] if states_in_order[j] % nm == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)]
 
+            #add up how much probability from the starting state ensemble (eqp_msm_blotted) is sent to each state in the target macrostate by each row of the msm (tpm_row_to_target)
+            # to do this loop over all the target microstates, cut out the row of the msm describing transition rates into that state, 
+            # and multiply it by the probability vector in the starting ensemble to figure out the probability flux into the target macrostate
+
             #csi = connected state index
             #fsi = full state index (in the n_macrostates*n_config_states state space)
             for csi, fsi in enumerate(states_in_order):
@@ -235,12 +239,19 @@ def calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_
                     #this is a row of transition probabilities going from all macrostates to the target
                     tpm_row_to_target = tpm[csi]
 
-                    rate += np.dot(tpm_row_to_target, eqp_msm_blotted)
+                    rate += np.dot(tpm_row_to_target, eqp_msm_blotted) #sum up rates of entry into each microstate of the target macrostate
 
+            #calculate the total equilibrium probability in the starting macrostate
+            #   note that all of this is necessarily in the starting ensemble
             eqp_init_macrostate = sum([eqpj[0] if macrostates_discrete[states_in_order[j] // nm] == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)])
 
+            #normalize the rate by the equilibrium probability in the starting macrostate
             rate /= eqp_init_macrostate
 
+            #calculate the mean first passage time from the rate
             mfpts[target_ms][starting_ms] = save_period/rate
 
+
     return mfpts
+
+

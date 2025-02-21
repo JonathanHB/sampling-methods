@@ -1,4 +1,10 @@
-#Method for propagating brownian dynamics
+#propagators.py
+#Jonathan Borowsky
+#2/21/25
+
+#Method for generating trajectories given a system (potential), temperature, and time step
+
+################################################################################################################
 
 import numpy as np
 
@@ -32,8 +38,8 @@ def propagate(system, kT, trj_coords, timestep, nsteps, save_period):
     return trj_out
 
 
-#Brownian diffusion
-#outputs only the last frame; avoids an extra layer of for loops when running WE
+#same as propagate() but outputs only the last frame; 
+#  avoids an extra layer of for loops when running WE
 def propagate_save1(system, kT, trj_coords, timestep, nsteps):
   
     nd = np.array(trj_coords.shape)   

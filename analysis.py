@@ -1,9 +1,31 @@
+#analysis.py
+#Jonathan Borowsky
+#2/21/25
+
+#functions for comparing the results of different methods 
+# of estimating energy lanscapes and kinetics 
+# to the true landscapes and to each other
+
+################################################################################################################
+
 import numpy as np
 import MSM_methods
 import matplotlib.pyplot as plt
 
 
-#compare true and estimated energy landscapes
+#----------------------------------------------------------------------------------------------------------------
+#compare true and estimated populations for a single estimation method
+
+#parameters
+# system: the system object
+# kT: the temperature of the system
+# coordinates: the x-coordinates at which equilibrium populations have been estimated
+# eq_pops_simulation: the estimated equilibrium populations
+# metrics: a list of metrics to compute`
+# ensemble_data: a list of tuples of (x-coordinates, populations) for each ensemble of a history augmented MSM
+
+#returns
+# returns: a dictionary of metrics computed`
 def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = [], ensemble_data = []):
 
     #compute true populations 
@@ -48,7 +70,15 @@ def landscape_comparison(system, kT, coordinates, eq_pops_simulation, metrics = 
     #print(f"kl divergence = {kl_divergence}")
 
 
+#----------------------------------------------------------------------------------------------------------------
 #helper function for printing mean first passage times neatly from matrices thereof
+
+#parameters
+# mfpts: a matrix of mean first passage times
+# digits: the number of decimal places to print
+
+#returns
+# returns: None
 def print_mfpts_2states(mfpts, digits = 0):
     inter_well_mpfts = [mfpts[0,1], mfpts[1,0]]
 
@@ -57,8 +87,27 @@ def print_mfpts_2states(mfpts, digits = 0):
     print(f"MFPT = {meanfmt}+-{stdfmt} steps")
 
 
+#----------------------------------------------------------------------------------------------------------------
+#construct a history augmented markov state model from a set of transitions
 
-def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_TPM=False):
+#parameters
+# ha_transitions: a list of transitions, each of which is a tuple of (from_state, to_state)
+# nbins: the number of bins to use for the analysis
+# system: the system object
+# save_period: the number of time steps between frames 
+#   (assumed to be equal to the lag time since haMSMs do not require 
+#   a lag time sufficient for their microstates to be markovian)
+# show_TPM: whether to show the transition probability matrix
+
+#returns
+# ha_x_config: the x-coordinates of the bins for which populations were computed (same as bincenters??)
+# ha_eqp_config: the equilibrium populations of the configurational bins derived by summing over all ensembles
+# x_ensembles: a list of lists of x-coordinates for each ensemble for which state populations were computed
+# p_ensembles: a list of lists of equilibrium populations for each ensemble for which state populations were computed
+# mfpts: a matrix of mean first passage times between the macrostates
+#   (the first index is the from_state and the second index is the to_state)
+
+def hamsm_analysis(ha_transitions, nbins, system, save_period, show_TPM=False):
 
     #for consiceness
     nm = system.n_macrostates
@@ -95,12 +144,12 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
     #-----------------------------------------------------------------------------------------------------------------
     #assemble halves of the energy landscape to get the overall energy
 
-    ha_sio_config = []
+    ha_x_config = []
     ha_eqp_config = []
     
     for i in range(0, len(bincenters)*2, 2):
         
-        ha_sio_config.append(bincenters[int(i/2)])
+        ha_x_config.append(bincenters[int(i/2)]) # I think it's fine to just return bincenters
         ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
 
 
@@ -109,4 +158,4 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
     mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period)
 
 
-    return ha_sio_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
+    return ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
