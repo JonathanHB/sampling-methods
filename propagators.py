@@ -28,7 +28,7 @@ def propagate(system, kT, trj_coords, timestep, nsteps, save_period):
     D = system.diffusion_coefficient
     
     trj_out = []
-    for i in range(int(nsteps/save_period)):
+    for i in range(nsteps//save_period):
     
         for step in range(save_period):
             trj_coords += D/kT * system.F(trj_coords) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)

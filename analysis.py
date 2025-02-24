@@ -159,3 +159,62 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, show_TPM=False):
 
 
     return ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
+
+
+#-----------------------
+#bootstrapping
+
+#parameters
+# n_bootstrap: number of times to run each method
+
+#returns
+
+
+def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, propagator, nsteps, save_period, n_parallel):
+    
+    mfpts = []
+    populations = []
+
+    for m in analysis_methods:
+        print(m)
+
+        method_mfpts = []
+        method_coords = []
+        method_probabilities = []
+
+        for bi in range(n_bootstrap):
+            print(f"round {bi}")
+
+            coords, probs, mfpts = m(system, kT, dt, propagator, nsteps, save_period, n_parallel)
+            method_mfpts.append(mfpts)
+            method_coords.append(coords)
+            method_probabilities.append(probs)
+
+        mfpts.append([np.mean(method_mfpts), np.std(method_mfpts)])
+        
+        #calculate energy landscape with error bars, accounting for the fact that not all landscape estimators will yield estimates for the same states due to ergodic trimming of MSMs
+        method_coords_all = np.unique(method_mfpts)
+        method_coords_all = np.sort(method_coords_all)
+        for mc in method_coords_all
+
+
+
+
+
+
+        lag_time = 1
+
+        long_trjs = long_simulation.run_long_parallel_simulations(propagator, system, kT, system.standard_init_coord, dt, nsteps, save_period, n_parallel)
+        print(f"simulation steps:\n Aggregate: {nsteps*n_parallel} \n Molecular: {nsteps}")
+
+
+        #------------------------------------------------------------------------------------------
+        #non-MSM analysis
+        x, p = long_simulation.estimate_eq_pops_histogram(long_trjs, system1, nbins)
+        transitions, mfpts = long_simulation.calc_mfpt(system1.macro_class, system1.n_macrostates, save_period, long_trjs)
+        if n_bootstrap == 1:
+            metrics = analysis.landscape_comparison(system1, kT, x, p, metrics = ["maew"])
+            analysis.print_mfpts_2states(mfpts)
+
+        inter_well_mpfts = [mfpts[0,1], mfpts[1,0]]
+        mfpts_long_raw.append(np.mean(inter_well_mpfts))

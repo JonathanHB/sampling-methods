@@ -29,14 +29,14 @@ import MSM_methods
 
 # returns: a set of trajectories, one for each parallel simulation
 
-def run_long_parallel_simulations(propagator, system, kT, x_init_coord, dt, nsteps, save_period, n_parallel):
+def run_long_parallel_simulations(propagator, system, kT, dt, nsteps, save_period, n_parallel):
     
     #set initial positions
-    x_init = np.array([x_init_coord for element in range(n_parallel)])
+    x_init = np.array([system.standard_init_coord for element in range(n_parallel)])
     long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period))
 
     #x_init is modified by being fed in to the propagator
-    x_init_2 = np.array([x_init_coord for element in range(n_parallel)])
+    x_init_2 = np.array([system.standard_init_coord for element in range(n_parallel)])
 
     #include the starting frame
     return np.concatenate((x_init_2.reshape(1,n_parallel), long_trjs)) 
