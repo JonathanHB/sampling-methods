@@ -161,19 +161,33 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, show_TPM=False):
     return ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
 
 
-#-----------------------
+#----------------------------------------------------------------------------------------------------------------
 #bootstrapping
 
 #parameters
 # n_bootstrap: number of times to run each method
+# analysis_methods: a list of analysis methods to compare
+#   each method should be a function that takes the parameters below and returns a tuple of (coordinates, populations, mfpts)
+# system: the system object
+# kT: the temperature of the system
+# dt: the time step of the simulation
+# propagator: the propagator to use for the simulation
+# nsteps: the number of steps to run the simulation
+# save_period: the number of time steps between saved frames
+# n_parallel: the number of parallel simulations to run
 
 #returns
-
+# mean first passage times and populations for each method, complete with standard deviations
 
 def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, propagator, nsteps, save_period, n_parallel):
     
-    mfpts = []
-    populations = []
+    #should we just rely on the user to check this?
+    #is there some better way to do these checks?
+    if n_bootstrap == 1:
+        print(f"error n_bootstrap must be at least 2}")
+
+    mfpts_all = []
+    populations_all = []
 
     for m in analysis_methods:
         print(m)
@@ -186,35 +200,64 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, p
             print(f"round {bi}")
 
             coords, probs, mfpts = m(system, kT, dt, propagator, nsteps, save_period, n_parallel)
-            method_mfpts.append(mfpts)
+            method_mfpts += mfpts
             method_coords.append(coords)
             method_probabilities.append(probs)
 
-        mfpts.append([np.mean(method_mfpts), np.std(method_mfpts)])
+        #TODO we ought to add code to detect systematic asymmetries between forward and reverse MFPTs
+        mfpts_all.append([np.mean(method_mfpts), np.std(method_mfpts)]) 
         
-        #calculate energy landscape with error bars, accounting for the fact that not all landscape estimators will yield estimates for the same states due to ergodic trimming of MSMs
-        method_coords_all = np.unique(method_mfpts)
-        method_coords_all = np.sort(method_coords_all)
-        for mc in method_coords_all
+        #calculate energy landscape with error bars, 
+        # accounting for the fact that not all landscape estimators will yield estimates 
+        # for the same states due to ergodic trimming of MSMs
+        # all msm equilibrium probabilities should be nonzero;
+        # even a very low probability is different from never having seen the state
+
+        #get a list of all coordinates which appeared in any MSM
+        method_coords_all = np.unique(method_coords)
+
+        mean_probs = []
+        mean_probs_err = []
+        for mc in method_coords_all:
+
+            #collect all probabilities estimated for the each sampled state
+            probs_c = []
+
+            for i, method_c in enumerate(method_coords):
+                if mc in method_c:
+                    probs_c.append(method_probabilities[i][method_c.index(mc)])
+            
+            mean_probs.append(np.mean(probs_c))
+
+            #standard deviation (dispersion, not a confidence interval) of estimates; 
+            # states for which probabilities were estimated only once are denoted with -1 as no standard deviation can be estimated
+            if len(probs_c) > 1:
+                mean_probs_err.append(np.std(probs_c))
+            else:
+                mean_probs_err.append(-1)
+
+        populations_all.append([method_coords_all, mean_probs, mean_probs_err])
+
+    return mfpts_all, populations_all 
 
 
 
 
 
 
-        lag_time = 1
+        # lag_time = 1
 
-        long_trjs = long_simulation.run_long_parallel_simulations(propagator, system, kT, system.standard_init_coord, dt, nsteps, save_period, n_parallel)
-        print(f"simulation steps:\n Aggregate: {nsteps*n_parallel} \n Molecular: {nsteps}")
+        # long_trjs = long_simulation.run_long_parallel_simulations(propagator, system, kT, system.standard_init_coord, dt, nsteps, save_period, n_parallel)
+        # print(f"simulation steps:\n Aggregate: {nsteps*n_parallel} \n Molecular: {nsteps}")
 
 
-        #------------------------------------------------------------------------------------------
-        #non-MSM analysis
-        x, p = long_simulation.estimate_eq_pops_histogram(long_trjs, system1, nbins)
-        transitions, mfpts = long_simulation.calc_mfpt(system1.macro_class, system1.n_macrostates, save_period, long_trjs)
-        if n_bootstrap == 1:
-            metrics = analysis.landscape_comparison(system1, kT, x, p, metrics = ["maew"])
-            analysis.print_mfpts_2states(mfpts)
+        # #------------------------------------------------------------------------------------------
+        # #non-MSM analysis
+        # x, p = long_simulation.estimate_eq_pops_histogram(long_trjs, system1, nbins)
+        # transitions, mfpts = long_simulation.calc_mfpt(system1.macro_class, system1.n_macrostates, save_period, long_trjs)
+        # if n_bootstrap == 1:
+        #     metrics = analysis.landscape_comparison(system1, kT, x, p, metrics = ["maew"])
+        #     analysis.print_mfpts_2states(mfpts)
 
-        inter_well_mpfts = [mfpts[0,1], mfpts[1,0]]
-        mfpts_long_raw.append(np.mean(inter_well_mpfts))
+        # inter_well_mpfts = [mfpts[0,1], mfpts[1,0]]
+        # mfpts_long_raw.append(np.mean(inter_well_mpfts))

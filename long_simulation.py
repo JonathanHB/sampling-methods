@@ -239,3 +239,34 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
     return ha_transitions
 
+
+#---------------------------------------------------------------------------------
+#run a long simulation and return the results of haMSM analysis for bootstrapping
+
+#parameters:
+# TODO bundle stuff like the system, timestep, and propagator 
+#   (and maybe the temperature for now, but it would be nice to try 
+#   varying it later in some enhanced simulation methods)
+# system: system object that contains the potential energy and force functions
+# kT: temperature at which to simulate
+# dt: time step for the simulation
+# propagator: integrator that generates the trajectory
+# aggregate_simulation_limit: the maximum total number of steps to run 
+#   (TODO later on experiment with further limits on molecular time)
+
+# returns: 
+# coordinates
+# equilibrium populations
+# mean first passage times between two macrostates
+#    TODO generalize to n macrostates; returning an upper triangular matrix or something (or just the whole square matrix)
+#    TODO this will also permit inspection of self transitions
+#    #consider returning transition counts as well to allow for comparison of the number of independent transitions, 
+#    which at least in some cases is probably a good proxy for sampling quality
+
+def long_simulation_hamsm_analysis(system, kT, dt, propagator, aggregate_simulation_limit):
+    #have n_parallel be an internal variable and then set molecular time accordingly or vice versa
+    #copy code from testing here
+    #then make a copy of this method for brute force analysis and test bootstrapping before including WE
+    #also consider switching to faster MSM-based propagator first
+    
+    pass
