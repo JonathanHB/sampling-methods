@@ -105,3 +105,34 @@ def calc_MFPT(tpm, x_msm, eqp_msm_init, macrostate_classifier, n_macrostates, la
                 #plt.show()
 
     return mfpts
+
+
+#---------------------------------------------------------------------------------
+#DEPRECATED
+#regular MSM analysis, should be broken into a get_transitions() method here and an msm_anslysis() method in analysis.py
+def msm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
+
+    #get bin boundaries
+    trj_flat = trjs.flatten()
+    binbounds, bincenters, step = system.analysis_bins(nbins)
+
+    #-------build MSM--------------------------------------------------------
+
+    trj_discrete = np.digitize(trjs, bins = binbounds)
+    transitions = [[trj_discrete[i][j], trj_discrete[i+lag_time][j]] for j in range(trj_discrete.shape[1]) for i in range(len(trj_discrete)-lag_time) ]
+
+    tpm, states_in_order = MSM_methods.transitions_2_msm(transitions)
+    if show_TPM:
+        plt.matshow(tpm)
+        plt.show()
+
+    eqp_msm_init = MSM_methods.tpm_2_eqprobs(tpm)
+    x_msm = [bincenters[i] for i in states_in_order]
+
+    #--------calculate MFPTS via steady state flux into an artificial sink macrostate----------------------------------------------------------------
+    # this approach is going to be slightly wrong since it achieves only an approximate steady state, but it the steady state at least appears to be quite stable.
+    # history augmented MSMs should be used instead anyway. See below for the implementation
+
+    mfpts = MSM_methods.calc_MFPT(tpm, x_msm, eqp_msm_init, system.macrostate_classifier, system.n_macrostates, lag_time, save_period)
+
+    return x_msm, eqp_msm_init, mfpts

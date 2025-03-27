@@ -107,7 +107,7 @@ def print_mfpts_2states(mfpts, digits = 0):
 # mfpts: a matrix of mean first passage times between the macrostates
 #   (the first index is the from_state and the second index is the to_state)
 
-def hamsm_analysis(ha_transitions, nbins, system, save_period, show_TPM=False):
+def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_TPM=False):
 
     #for consiceness
     nm = system.n_macrostates
@@ -144,21 +144,27 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, show_TPM=False):
     #-----------------------------------------------------------------------------------------------------------------
     #assemble halves of the energy landscape to get the overall energy
 
+    all_eqp_config = []
+
     ha_x_config = []
     ha_eqp_config = []
     
     for i in range(0, len(bincenters)*2, 2):
         
-        ha_x_config.append(bincenters[int(i/2)]) # I think it's fine to just return bincenters
-        ha_eqp_config.append(sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)]))
+        prob_all_ensembles = sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)])
+        all_eqp_config.append(prob_all_ensembles)
+        
+        if sum([1 if i+j in states_in_order else 0 for j in range(nm)]) > 0:
+            ha_x_config.append(bincenters[int(i/2)]) # I think it's fine to just return bincenters
+            ha_eqp_config.append(prob_all_ensembles)
 
 
     #-----------------------------------------------------------------------------------------------------------------
     #calculate mfpts
-    mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period)
+    mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period*lag_time)
 
 
-    return ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
+    return bincenters, all_eqp_config, ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
 
 
 #----------------------------------------------------------------------------------------------------------------
@@ -179,16 +185,17 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, show_TPM=False):
 #returns
 # mean first passage times and populations for each method, complete with standard deviations
 
-def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, propagator, nsteps, save_period, n_parallel):
+def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins):
     
     #should we just rely on the user to check this?
     #is there some better way to do these checks?
-    if n_bootstrap == 1:
-        print(f"error n_bootstrap must be at least 2}")
+    if n_bootstrap < 2:
+        print("error: n_bootstrap must be at least 2")
 
     mfpts_all = []
     populations_all = []
 
+    #loop over methods
     for m in analysis_methods:
         print(m)
 
@@ -196,17 +203,22 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, p
         method_coords = []
         method_probabilities = []
 
+        #replicates for each method
         for bi in range(n_bootstrap):
             print(f"round {bi}")
 
-            coords, probs, mfpts = m(system, kT, dt, propagator, nsteps, save_period, n_parallel)
-            method_mfpts += mfpts
+            aggregate_simulation, coords, probs, mfpts = m(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins)
+            method_mfpts.append(mfpts)
             method_coords.append(coords)
             method_probabilities.append(probs)
 
         #TODO we ought to add code to detect systematic asymmetries between forward and reverse MFPTs
-        mfpts_all.append([np.mean(method_mfpts), np.std(method_mfpts)]) 
+        mfpts_3d = np.vstack(method_mfpts)
+        mfpts_all.append([np.mean(method_mfpts, axis=0), np.std(method_mfpts, axis=0)]) 
         
+        #print(len(method_probabilities))
+        #print([len(mp) for mp in method_probabilities])
+
         #calculate energy landscape with error bars, 
         # accounting for the fact that not all landscape estimators will yield estimates 
         # for the same states due to ergodic trimming of MSMs
@@ -214,7 +226,8 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, p
         # even a very low probability is different from never having seen the state
 
         #get a list of all coordinates which appeared in any MSM
-        method_coords_all = np.unique(method_coords)
+        method_coords_flat = [c for mci in method_coords for c in mci]
+        method_coords_all = np.unique(method_coords_flat)
 
         mean_probs = []
         mean_probs_err = []
@@ -225,7 +238,7 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, p
 
             for i, method_c in enumerate(method_coords):
                 if mc in method_c:
-                    probs_c.append(method_probabilities[i][method_c.index(mc)])
+                    probs_c.append(method_probabilities[i][np.where(method_c == mc)[0][0]])
             
             mean_probs.append(np.mean(probs_c))
 
@@ -243,21 +256,23 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, p
 
 
 
+def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
+    
+    x_all = np.linspace(system.standard_analysis_range[0], system.standard_analysis_range[1], n_analysis_bins+1)
 
+    eqp_analytic = [np.exp(-system.potential(x)/kT) for x in x_all]
+    eqp_sum = sum(eqp_analytic)
+    eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
 
-        # lag_time = 1
+    plt.plot(x_all, eqp_analytic, color="black")
 
-        # long_trjs = long_simulation.run_long_parallel_simulations(propagator, system, kT, system.standard_init_coord, dt, nsteps, save_period, n_parallel)
-        # print(f"simulation steps:\n Aggregate: {nsteps*n_parallel} \n Molecular: {nsteps}")
+    colorlist = ["red", "blue", "green"]
 
+    for cx, method_data in enumerate(populations_all):
+        for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
+            
+            if mpei == -1:
+                plt.scatter(mci, mpi, color=colorlist[cx], marker=".")
+            else:
+                plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
 
-        # #------------------------------------------------------------------------------------------
-        # #non-MSM analysis
-        # x, p = long_simulation.estimate_eq_pops_histogram(long_trjs, system1, nbins)
-        # transitions, mfpts = long_simulation.calc_mfpt(system1.macro_class, system1.n_macrostates, save_period, long_trjs)
-        # if n_bootstrap == 1:
-        #     metrics = analysis.landscape_comparison(system1, kT, x, p, metrics = ["maew"])
-        #     analysis.print_mfpts_2states(mfpts)
-
-        # inter_well_mpfts = [mfpts[0,1], mfpts[1,0]]
-        # mfpts_long_raw.append(np.mean(inter_well_mpfts))

@@ -6,6 +6,8 @@ import numpy as np
 import random
 import sys
 import matplotlib.pyplot as plt
+import propagators
+import analysis
 
 #parameters
 #   x_init: list of floats: coordinates of initial walkers
@@ -249,3 +251,54 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrang
                         ha_binning=False)
 
 
+def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, nsteps, n_analysis_bins):
+    
+    #N = 500             #total number of walkers within binrange
+    #nbins = 40         #total number of bins within binrange 
+    #nbins should match the value above, at least for analysis; make a separate n_bins_analysis variable
+
+    walkers_per_bin = int(round(n_parallel/n_analysis_bins))
+    print(f"Each bin can hold up to {walkers_per_bin} walkers, for a total of up to {walkers_per_bin*(n_analysis_bins+2)} walkers")
+
+    binrange = system.standard_analysis_range 
+
+    #progress coordinate range within which to bin simulations
+                        #this should extend well past the stall point for examination of the WE stall force
+                        #the area past either end of binrange is a bin extending to either + or - inf, yielding a total of nbins+2 bins
+    n_macrostates=2
+            
+    #nsteps = save_period        #round length; to match long simulations since MFPT = f(lag time)
+    nrounds = int(round(aggregate_simulation_limit/(n_parallel*nsteps)))  #number of WE rounds to run
+
+    x_init_val = system.standard_init_coord
+
+    #run weighted ensemble with brownian dynamics
+    #put this on multiple lines
+    x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round \
+    = weighted_ensemble_start(\
+                        x_init_val,\
+                        nrounds,\
+                        n_analysis_bins,\
+                        walkers_per_bin,\
+                        binrange, propagators.propagate_save1,\
+                        [system, kT, dt, nsteps],\
+                        system.ensemble_class,\
+                        n_macrostates,\
+                        ha_binning=False)
+
+
+    aggregate_walkers = len([j for i in xtrj for j in i])
+    #print(f"simulation steps:\n Aggregate: {nsteps*aggregate_walkers} \n Molecular: {nsteps*nrounds}")
+
+    #x, p, xs, es = weighted_ensemble_2.landscape_recovery(xtrj, wtrj, binbounds, transitions, hamsm_transitions, n_trans_by_round, nrounds, n_macrostates, system1.potential, system1.macro_class, kT)
+
+    x_hamsm, eqp_hamsm, x_hamsm_sampled, eqp_hamsm_sampled, x_ens, p_ens, mfpts_hamsm = analysis.hamsm_analysis(hamsm_transitions, n_analysis_bins, system, nsteps, lag_time=1, show_TPM=False)
+
+    # if n_bootstrap == 1:
+    #     metrics = analysis.landscape_comparison(system1, kT, x_hamsm, eqp_hamsm, metrics = ["maew"], ensemble_data = [x_ens, p_ens])
+    #     analysis.print_mfpts_2states(mfpts_hamsm)
+
+    # inter_well_mpfts_we_hamsm = [mfpts_hamsm[0,1], mfpts_hamsm[1,0]]
+    # mfpts_we_hamsm.append(np.mean(inter_well_mpfts_we_hamsm))
+
+    return nsteps*aggregate_walkers, x_hamsm_sampled, eqp_hamsm_sampled, mfpts_hamsm

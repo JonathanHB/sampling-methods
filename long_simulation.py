@@ -12,6 +12,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import MSM_methods
+import analysis
+import propagators
 
 
 #---------------------------------------------------------------------------------
@@ -44,7 +46,7 @@ def run_long_parallel_simulations(propagator, system, kT, dt, nsteps, save_perio
 
 #---------------------------------------------------------------------------------
 #estimate the equilibrium populations from a set of parallel trajectories by counting up where the system spends its time
-#parameters:
+# parameters:
 # trjs: a set of parallel trajectories
 # system: system object that contains the potential energy and force functions
 # nbins: number of bins to use for the histogram
@@ -74,7 +76,11 @@ def estimate_eq_pops_histogram(trjs, system, nbins):
     for b in binned_trj:
         eq_pops[b] += 1/len(trj_flat)
 
-    return bincenters, eq_pops
+    bins_sampled = np.sort(np.unique(binned_trj))
+    bincenters_sampled = [bincenters[i] for i in bins_sampled]
+    eqp_sampled = [eq_pops[i] for i in bins_sampled]
+
+    return bincenters, eq_pops, bincenters_sampled, eqp_sampled
 
 
 #---------------------------------------------------------------------------------
@@ -127,37 +133,6 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
     mfpts = save_period*np.reciprocal(n_transitions)*frames_by_state
     
     return n_transitions, mfpts
-
-
-#---------------------------------------------------------------------------------
-#DEPRECATED
-#regular MSM analysis, should be broken into a get_transitions() method here and an msm_anslysis() method in analysis.py
-def msm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
-
-    #get bin boundaries
-    trj_flat = trjs.flatten()
-    binbounds, bincenters, step = system.analysis_bins(nbins)
-
-    #-------build MSM--------------------------------------------------------
-
-    trj_discrete = np.digitize(trjs, bins = binbounds)
-    transitions = [[trj_discrete[i][j], trj_discrete[i+lag_time][j]] for j in range(trj_discrete.shape[1]) for i in range(len(trj_discrete)-lag_time) ]
-
-    tpm, states_in_order = MSM_methods.transitions_2_msm(transitions)
-    if show_TPM:
-        plt.matshow(tpm)
-        plt.show()
-
-    eqp_msm_init = MSM_methods.tpm_2_eqprobs(tpm)
-    x_msm = [bincenters[i] for i in states_in_order]
-
-    #--------calculate MFPTS via steady state flux into an artificial sink macrostate----------------------------------------------------------------
-    # this approach is going to be slightly wrong since it achieves only an approximate steady state, but it the steady state at least appears to be quite stable.
-    # history augmented MSMs should be used instead anyway. See below for the implementation
-
-    mfpts = MSM_methods.calc_MFPT(tpm, x_msm, eqp_msm_init, system.macrostate_classifier, system.n_macrostates, lag_time, save_period)
-
-    return x_msm, eqp_msm_init, mfpts
 
 
 #---------------------------------------------------------------------------------
@@ -241,6 +216,42 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
 
 #---------------------------------------------------------------------------------
+#run a long simulation and return the results of brute force (histogram) analysis for bootstrapping
+
+#parameters:
+# TODO bundle stuff like the system, timestep, and propagator 
+#   (and maybe the temperature for now, but it would be nice to try 
+#   varying it later in some enhanced simulation methods)
+# system: system object that contains the potential energy and force functions
+# kT: temperature at which to simulate
+# dt: time step for the simulation
+# propagator: integrator that generates the trajectory
+# aggregate_simulation_limit: the maximum total number of steps to run 
+#   (TODO later on experiment with further limits on molecular time)
+
+# returns: 
+# coordinates
+# equilibrium populations
+# mean first passage time matrix
+#    #consider returning transition counts as well to allow for comparison of the number of independent transitions, 
+#    which at least in some cases is probably a good proxy for sampling quality
+# aggregate number of simulation steps
+
+
+def long_simulation_histogram_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins):
+    
+    #run simulation
+    nsteps = int(round(aggregate_simulation_limit/n_parallel))
+    long_trjs = run_long_parallel_simulations(propagators.propagate, system, kT, dt, nsteps, save_period, n_parallel)
+
+    #analysis
+    x, p, xs, ps = estimate_eq_pops_histogram(long_trjs, system, n_analysis_bins)
+    transitions, mfpts = calc_mfpt(system.macro_class, system.n_macrostates, save_period, long_trjs)
+
+    return nsteps*n_parallel, xs, ps, mfpts
+
+
+#---------------------------------------------------------------------------------
 #run a long simulation and return the results of haMSM analysis for bootstrapping
 
 #parameters:
@@ -263,10 +274,15 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
 #    #consider returning transition counts as well to allow for comparison of the number of independent transitions, 
 #    which at least in some cases is probably a good proxy for sampling quality
 
-def long_simulation_hamsm_analysis(system, kT, dt, propagator, aggregate_simulation_limit):
-    #have n_parallel be an internal variable and then set molecular time accordingly or vice versa
-    #copy code from testing here
-    #then make a copy of this method for brute force analysis and test bootstrapping before including WE
-    #also consider switching to faster MSM-based propagator first
-    
-    pass
+def long_simulation_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins):
+
+    #run simulation
+    nsteps = int(round(aggregate_simulation_limit/n_parallel))
+    long_trjs = run_long_parallel_simulations(propagators.propagate, system, kT, dt, nsteps, save_period, n_parallel)
+
+    #analysis
+    #note that lag time is measured in saved frames
+    ha_transitions = get_ha_transitions(long_trjs, n_analysis_bins, system, lag_time=1)
+    x, p, xs, ps, x_ens, p_ens, mfpts = analysis.hamsm_analysis(ha_transitions, n_analysis_bins, system, save_period, lag_time=1, show_TPM=False)
+
+    return nsteps*n_parallel, xs, ps, mfpts
