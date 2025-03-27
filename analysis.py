@@ -258,15 +258,15 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
 
 def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
     
-    x_all = np.linspace(system.standard_analysis_range[0], system.standard_analysis_range[1], n_analysis_bins+1)
+    binbounds, bincenters, step = system.analysis_bins(n_analysis_bins)
 
-    eqp_analytic = [np.exp(-system.potential(x)/kT) for x in x_all]
+    eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
     eqp_sum = sum(eqp_analytic)
     eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
 
-    plt.plot(x_all, eqp_analytic, color="black")
+    plt.plot(bincenters, eqp_analytic, color="black")
 
-    colorlist = ["red", "blue", "green"]
+    colorlist = ["red", "green", "blue"]
 
     for cx, method_data in enumerate(populations_all):
         for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):

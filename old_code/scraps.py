@@ -136,3 +136,94 @@ def msm_analysis(trjs, nbins, system, save_period, lag_time=1, show_TPM=False):
     mfpts = MSM_methods.calc_MFPT(tpm, x_msm, eqp_msm_init, system.macrostate_classifier, system.n_macrostates, lag_time, save_period)
 
     return x_msm, eqp_msm_init, mfpts
+
+
+
+
+
+#build an energy landscape with a specified set of minima, and transition states.
+        #this landscape is to be represented by a set of points placed randomly in n-dimensional space at the specified state_density
+        #temperature is used to construct the transition probability matrix (it should cancel out elsewhere? <--TODO verify this)
+        #noise spectrum is the amplitude of noise to apply as a function of the spatial frequency of the noise (i.e. a low frequency noise is applied with wide gaussians)
+def build_landscape(n_dim, minima_coords, minima_energies, ts_energies, state_density, kT, noise_spectrum):
+
+    box_min = np.min(minima_coords, axis=0)
+    box_max = np.max(minima_coords, axis=0)
+    box_lengths = box_max-box_min
+    box_padded = 3*box_lengths
+    box_vol = np.prod(box_padded)
+    threshold = 0.1 #TODO: set programmatically
+
+    #obtain initial population estimates using the minima provided
+    pi_all = []
+    xi_all = []
+
+    for point in range(state_density*box_vol):
+        #sample uniformly distributed random coordinates within the box
+        xi = np.multiply(box_padded, np.random.rand(n_dim)) + box_min - box_lengths
+        
+        pi = 0
+        for mc, me in zip(minima_coords, minima_energies):
+            pi += np.exp(-(me[0] + (np.linalg.norm(mc-xi) / me[1]**(1/n_dim))**2)/kT)
+
+        #if pi >= threshold:
+        xi_all.append(xi)
+        pi_all.append(pi)
+
+    #plt.hist(pi_all)
+    #plt.show()
+    print(sum(pi_all))
+
+    plt.hist2d([i[0] for i in xi_all], [i[1] for i in xi_all], weights = pi_all, bins = [40,40], range=[[-5,5],[-5,5]])
+    for mc in minima_coords:
+        plt.scatter(mc[0], mc[1])
+
+    plt.show()
+
+    #adjust transition state energies to match system specifications by rescaling the region between each pair of gaussians
+    #TODO rescale the rest of the gaussian up to keep total probability the same?
+    for mci in range(len(minima_coords)):
+        for mcj in range(mci+1,len(minima_coords)):
+            if ts_energies[mci][mcj][1] == -1:
+                continue
+
+            print(mci)
+            print(mcj)
+            xts_ij = np.mean((minima_coords[mci], minima_coords[mcj]), axis = 0)
+
+            pts_ij_i = np.exp(-(minima_energies[mci][0] + (np.linalg.norm(xts_ij-minima_coords[mci]) / minima_energies[mci][1]**(1/n_dim))**2)/kT)
+            pts_ij_j = np.exp(-(minima_energies[mcj][0] + (np.linalg.norm(xts_ij-minima_coords[mcj]) / minima_energies[mcj][1]**(1/n_dim))**2)/kT)
+
+            #ts_prob_scale_factor = np.exp(-ts_energies[mci][mcj][0]/kT)/(pts_ij_i+pts_ij_j)
+            ts_enthalpy_scale_factor = ts_energies[mci][mcj][0]/(-kT*np.log(pts_ij_i+pts_ij_j))
+
+            ts_vector = xts_ij-minima_coords[mci]
+
+            for k, xk in enumerate(xi_all):
+                xk_rel = xk-xts_ij
+                xk_proj_frac = np.dot(ts_vector, xk_rel)/np.dot(ts_vector, ts_vector)
+                xk_perp = xk_rel - xk_proj_frac*ts_vector
+                
+                pi_all[k] = pi_all[k]**(1-(1-ts_enthalpy_scale_factor)*np.exp(-(2*xk_proj_frac)**2 - ((np.linalg.norm(xk_perp)/ts_energies[mci][mcj][1]**(1/(n_dim-1)))**2)/kT))
+
+            print(xts_ij)
+            print(ts_enthalpy_scale_factor)
+
+    plt.hist2d([i[0] for i in xi_all], [i[1] for i in xi_all], weights = pi_all, bins = [40,40], range=[[-5,5],[-5,5]])
+    for mc in minima_coords:
+        plt.scatter(mc[0], mc[1])
+
+    plt.show()
+
+    plt.scatter([i[0] for i in xi_all], [i[1] for i in xi_all], c=pi_all, cmap='viridis')
+
+
+minima_coords = [[1,-1],[0,0],[2,1],[-3,0]]
+#minima_coords = [[1,-1,3],[0,0,0],[2,1,1],[-3,0,1]]
+minima_energies = [[1,0.9],[0,0.7],[1,0.5],[.5,1]]
+ts_energies = [[[0,0],[10,.5],[0,-1],[0,-1]],[[],[0,0],[2,1],[1,50]],[[],[],[0,0],[0,-1]],[[],[],[],[0,0]]]
+state_density = 100
+kT = .5
+noise_spectrum = "TBD"
+
+build_landscape(2, minima_coords, minima_energies, ts_energies, state_density, kT, noise_spectrum)
