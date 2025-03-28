@@ -119,8 +119,9 @@ class unit_double_well(potential_well_1d):
     def __init__(self):
         self.diffusion_coefficient = 1
         self.n_macrostates = 2
-        self.standard_init_coord = -1/np.sqrt(2)
-        self.standard_analysis_range = [-2,2]
+        self.standard_init_coord = [-1/np.sqrt(2)]
+        self.standard_analysis_range = [[-2],[2]]
+        self.start_from_index = False
         super().__init__(self.potential, self.macro_class, self.standard_analysis_range)
 
 
@@ -146,18 +147,20 @@ class unit_sine_well(potential_well_1d):
     def __init__(self):
         self.diffusion_coefficient = 1
         self.n_macrostates = 2
-        self.standard_init_coord = -3*np.pi 
-        self.standard_analysis_range = [-20,20]
+        self.standard_init_coord = [-3*np.pi]
+        self.standard_analysis_range = [[-20],[20]]
+        self.start_from_index = False
         super().__init__(self.potential, self.macro_class, self.standard_analysis_range)
 
 
-#build an energy landscape with a specified set of minima, and transition states.
-        #this landscape is to be represented by a set of points placed randomly in n-dimensional space at the specified state_density
-        #temperature is used to construct the transition probability matrix (it should cancel out elsewhere? <--TODO verify this)
-        #noise spectrum is the amplitude of noise to apply as a function of the spatial frequency of the noise (i.e. a low frequency noise is applied with wide gaussians)
-def build_landscape(n_dim, minima_coords, minima_energies, ts_energies, state_density, temperature, noise_spectrum):
+#this is a stub whose functionality is mostly implemented in energy_landscapes_gaussian.py
+# #build an energy landscape with a specified set of minima, and transition states.
+#         #this landscape is to be represented by a set of points placed randomly in n-dimensional space at the specified state_density
+#         #temperature is used to construct the transition probability matrix (it should cancel out elsewhere? <--TODO verify this)
+#         #noise spectrum is the amplitude of noise to apply as a function of the spatial frequency of the noise (i.e. a low frequency noise is applied with wide gaussians)
+# def build_landscape(n_dim, minima_coords, minima_energies, ts_energies, state_density, temperature, noise_spectrum):
 
-    box_min = np.min(minima_coords, axis=0)
-    box_max = np.max(minima_coords, axis=1)
-    print(box_min)
-    print(box_max)
+#     box_min = np.min(minima_coords, axis=0)
+#     box_max = np.max(minima_coords, axis=1)
+#     print(box_min)
+#     print(box_max)

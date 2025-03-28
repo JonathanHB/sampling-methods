@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import MSM_methods
 import analysis
 import propagators
+import deeptime
 
 
 #---------------------------------------------------------------------------------
@@ -33,15 +34,21 @@ import propagators
 
 def run_long_parallel_simulations(propagator, system, kT, dt, nsteps, save_period, n_parallel):
     
+    if system.start_from_index:
+        sim_init_coord = system.standard_init_index
+    else:
+        sim_init_coord = system.standard_init_coord
+
     #set initial positions
-    x_init = np.array([system.standard_init_coord for element in range(n_parallel)])
-    long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period))
+    x_init = np.array([sim_init_coord for element in range(n_parallel)])
+    long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period)).transpose(1,0,2)
 
     #x_init is modified by being fed in to the propagator
-    x_init_2 = np.array([system.standard_init_coord for element in range(n_parallel)])
+    x_init_2 = np.array([sim_init_coord for element in range(n_parallel)]).reshape((n_parallel, 1, len(system.standard_init_coord)))
 
     #include the starting frame
-    return np.concatenate((x_init_2.reshape(1,n_parallel), long_trjs)) 
+    #'1' here is not a magic number; it instead reflects the fact that the starting coordinate is a single frame long
+    return np.concatenate((x_init_2, long_trjs), axis=1) 
 
 
 #---------------------------------------------------------------------------------
@@ -107,7 +114,7 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
     n_transitions = np.zeros([n_macrostates, n_macrostates])
     frames_by_state = np.zeros(n_macrostates)
     
-    for trj in trajectories.transpose():
+    for trj in trajectories:
         
         #get initial state
         last_state = macrostate_classifier(trj[0])
@@ -158,10 +165,11 @@ def __get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag
     for trj in trjs_discrete:
         
         transitions_trj = []
+        #print(trj[0])
 
         #get initial state
         last_ensemble = macrostates_discrete[trj[0]]
-        
+        #print(trj.shape)
         for i in range(len(trj)-lag_time):
     
             current_macrostate = macrostates_discrete[trj[i+lag_time]]
@@ -206,7 +214,8 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
     binbounds, bincenters, step = system.analysis_bins(nbins)
 
     #bin trajectories in configurational space and assign the bins to macrostates
-    trjs_discrete = np.digitize(trjs, bins = binbounds).transpose()
+    trjs_discrete = np.digitize(trjs, bins = binbounds).reshape((trjs.shape[0], trjs.shape[1]))
+    print(trjs_discrete.shape)
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
     #get a list of all the transitions

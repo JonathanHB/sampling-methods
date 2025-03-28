@@ -18,7 +18,8 @@ import numpy as np
 #   nsteps: nonnegative int: how many time steps to propagate for
 
 #returns
-#   final_trj_coords: final coordinates of the trajectories on the progress coordinate
+#   trj_out: list of arrays: the coordinates of the trajectories at each time step
+#      trj_out has size [nsteps//save_period, trj_coords.shape[0], trj_coords.shape[1]]
 
 #Brownian diffusion
 #nsteps must be an integer multiple of save_period
@@ -49,3 +50,15 @@ def propagate_save1(system, kT, trj_coords, timestep, nsteps):
         trj_coords += D/kT * system.F(trj_coords) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
 
     return trj_coords
+
+
+#TODO make a propagator version that actually uses kT for testing replica exchange schemes
+def propagate_msm(system_dtmsm, kT, trj_coords, timestep, nsteps, save_period):
+
+    tca = []
+
+    for tci in trj_coords:
+        dt_trj = system_dtmsm.dtmsm.simulate(nsteps, start = tci, dt = save_period) #, seed=0
+        tca.append(np.array([system_dtmsm.x[dti] for dti in dt_trj]))
+
+    return np.array(tca).transpose() #, dt_trj
