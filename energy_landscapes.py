@@ -87,14 +87,18 @@ class potential_well_1d():
 
     #return bins for analysis of each energy landscape, 
     # including end bins for anything outside the standard bin range
-    def analysis_bins(self, nbins):
+    def analysis_bins_1d(self, nbins):
         
-        step = (self.standard_analysis_rangee[1]-self.standard_analysis_rangee[0])/nbins
+        step = (self.standard_analysis_rangee[1][0]-self.standard_analysis_rangee[0][0])/nbins
     
-        binbounds = np.linspace(self.standard_analysis_rangee[0], self.standard_analysis_rangee[1], nbins+1)
-        bincenters = np.linspace(self.standard_analysis_rangee[0]-step/2, self.standard_analysis_rangee[1]+step/2, nbins+2)
+        binbounds = np.linspace(self.standard_analysis_rangee[0][0], self.standard_analysis_rangee[1][0], nbins+1)
+        bincenters = np.linspace(self.standard_analysis_rangee[0][0]-step/2, self.standard_analysis_rangee[1][0]+step/2, nbins+2)
 
         return binbounds, bincenters, step
+    
+    def bin_trj_nd(self, nbins, trj):
+        
+        steps = [(self.standard_analysis_rangee[1][i]-self.standard_analysis_rangee[0][i])/nbins for i in range(len(self.standard_analysis_rangee[1]))]
 
 
 #a double well constructed using a quartic and quadratic potential

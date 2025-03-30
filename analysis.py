@@ -9,9 +9,10 @@
 ################################################################################################################
 
 import numpy as np
-import MSM_methods
+import itertools
 import matplotlib.pyplot as plt
 
+import MSM_methods
 
 #----------------------------------------------------------------------------------------------------------------
 #compare true and estimated populations for a single estimation method
@@ -88,6 +89,62 @@ def print_mfpts_2states(mfpts, digits = 0):
 
 
 #----------------------------------------------------------------------------------------------------------------
+
+def digitize_to_voxel_bins(analysis_range, nbins, trjs):
+
+    ndim = len(analysis_range[0])
+
+    boxlengths = [xmax-xmin for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+    boxcenters = [(xmax+xmin)/2 for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+
+    binwidths = []
+    for bl in boxlengths:
+        binwidths.append(bl*(nbins*np.product([bl/blj for blj in boxlengths]))**(-1/ndim))
+
+    #make bins the same size in each dimension, 
+    # preventing anisotropies from arising from the fact that the analysis box edge lengths may not be in an integer ratio
+    binwidth = np.mean(binwidths) 
+
+    #calculate bin centers and boundaries
+    binbounds = []
+    bincenters = []
+    nbins = []
+
+    for d in range(ndim):
+        nbins_d = int(np.ceil(boxlengths[d]/binwidth))
+        nbins.append(nbins_d+2)
+
+        rmin = boxcenters[d]-binwidth*nbins_d/2
+        rmax = boxcenters[d]+binwidth*nbins_d/2
+
+        binbounds.append(np.linspace(rmin, rmax, nbins_d+1))
+        bincenters.append(np.linspace(rmin-binwidth/2, rmax+binwidth/2, nbins_d+2))
+
+    bincenters_flat = list(itertools.product(*bincenters))
+
+    #bin trajectories in each dimension
+    binned_all = []
+
+    for trj in trjs:
+
+        binned_by_dim = []    
+        for d in range(ndim):
+            binned_by_dim.append(np.digitize([f[d] for f in trj], bins = binbounds[d]))
+        
+        binned_all.append(np.array(binned_by_dim))
+
+    #combine binning information for each dimension to place every frame into a bin with a scalar index
+    actual_nbins = np.product(nbins)
+
+    prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+    print(prods_higher)
+    
+    trjs_binned = [np.matmul(prods_higher, binned_by_dim) for binned_by_dim in binned_all]
+
+    return trjs_binned, bincenters_flat, binwidth, actual_nbins
+
+
+#----------------------------------------------------------------------------------------------------------------
 #construct a history augmented markov state model from a set of transitions
 
 #parameters
@@ -113,7 +170,7 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
     nm = system.n_macrostates
 
     #get bin boundaries
-    binbounds, bincenters, step = system.analysis_bins(nbins)
+    binbounds, bincenters, step = system.analysis_bins_1d(nbins)
 
     #assign the bins to macrostates
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
@@ -258,7 +315,7 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
 
 def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
     
-    binbounds, bincenters, step = system.analysis_bins(n_analysis_bins)
+    binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
 
     eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
     eqp_sum = sum(eqp_analytic)

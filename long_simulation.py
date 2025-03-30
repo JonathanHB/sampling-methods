@@ -65,21 +65,24 @@ def run_long_parallel_simulations(propagator, system, kT, dt, nsteps, save_perio
 #   but the bin centers are placed as if they were spaced equally to the other bins
 
 def estimate_eq_pops_histogram(trjs, system, nbins):
-    
+
+    binned_trj, bincenters, binwidth, actual_nbins = analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
+    binned_trj = np.array(binned_trj).flatten()
+
     #flatten trajectory since the order of the frames does not matter here
     trj_flat = trjs.flatten()
 
     # define bins
-    binbounds, bincenters, step = system.analysis_bins(nbins)
-
+    #binbounds, bincenters, step = system.analysis_bins_1d(nbins)
+    #actual_nbins = nbins
     #bin trajectory
 
     #note that digitize reserves the index 0 for entries below the first bin, 
     # but in this case the bins have been constructed so that all entries lie within the explicit bin range
     # so the first and last bins of eq_pops should be empty
-    binned_trj = np.digitize(trj_flat, bins = binbounds)
+    #binned_trj = np.digitize(trj_flat, bins = binbounds)
 
-    eq_pops = np.zeros(nbins+2)
+    eq_pops = np.zeros(actual_nbins)
     for b in binned_trj:
         eq_pops[b] += 1/len(trj_flat)
 
@@ -210,8 +213,10 @@ def __get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag
 #   multiplied by the number of macrostates, plus the ensemble index
 def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
+    analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
+
     #get bin boundaries
-    binbounds, bincenters, step = system.analysis_bins(nbins)
+    binbounds, bincenters, step = system.analysis_bins_1d(nbins)
 
     #bin trajectories in configurational space and assign the bins to macrostates
     trjs_discrete = np.digitize(trjs, bins = binbounds).reshape((trjs.shape[0], trjs.shape[1]))
