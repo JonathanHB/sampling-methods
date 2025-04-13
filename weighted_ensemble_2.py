@@ -42,7 +42,7 @@ import analysis
 #      4. log data of interest
 #      5. pass coordinates, weights, and ensembles to next round 
 
-def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
+def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
 
     split_limit = 2.00001*sys.float_info.min #0.0002
     merge_limit = 1 #effectively no limit
@@ -52,7 +52,9 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
     #extreme_val = 10**6
     #binbounds = np.concatenate(([-extreme_val], np.linspace(binrange[0], binrange[1], nbins+1), [extreme_val]))
     #if not ha_binning:
-    binbounds = np.linspace(binrange[0], binrange[1], nbins+1)
+    #binbounds = np.linspace(binrange[0], binrange[1], nbins+1)
+    binned_trj, bincenters, binwidth, actual_nbins, binbounds = analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, [[]])
+
     #else:
     #    binbounds = np.linspace(binrange[0], binrange[1], (nbins+1)*n_macrostates)
     
@@ -230,7 +232,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, binrange,
 
 
 #wrapper function for weighted_ensemble() that initializes the walkers
-def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrange, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
+def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, system, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
 
     #start 1 bin worth of walkers at x_init_val with equal weights
     x_init = np.array([x_init_val for element in range(walkers_per_bin)])
@@ -244,7 +246,7 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, binrang
                         nrounds,\
                         nbins,\
                         walkers_per_bin,\
-                        binrange, propagator,\
+                        system, propagator,\
                         prop_params,\
                         macrostate_classifier,\
                         n_macrostates,\
@@ -260,7 +262,7 @@ def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit,
     walkers_per_bin = int(round(n_parallel/n_analysis_bins))
     print(f"Each bin can hold up to {walkers_per_bin} walkers, for a total of up to {walkers_per_bin*(n_analysis_bins+2)} walkers")
 
-    binrange = system.standard_analysis_range 
+    #binrange = system.standard_analysis_range 
 
     #progress coordinate range within which to bin simulations
                         #this should extend well past the stall point for examination of the WE stall force
@@ -280,7 +282,7 @@ def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit,
                         nrounds,\
                         n_analysis_bins,\
                         walkers_per_bin,\
-                        binrange, propagators.propagate_save1,\
+                        system, propagators.propagate_save1,\
                         [system, kT, dt, nsteps],\
                         system.ensemble_class,\
                         n_macrostates,\

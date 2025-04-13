@@ -55,13 +55,15 @@ def build_landscape(n_dim, minima_coords, minima_energies, state_density, kT, th
 
     #normalize probabilities
     p_tot = sum(pi_all)
-    pi_all = [pii/p_tot for pii in pi_all]
+    pi_all_ref_t = [pii/p_tot for pii in pi_all]
     
     #calculate energies and then determine populations at a temperature differing by a factor of kT from the reference temperature of 1
-    e_all = [-np.log(pii) for pii in pi_all]
-    pi_all_out = [np.exp(-eii/kT) for eii in e_all]
+    e_all = [-np.log(pii) for pii in pi_all_ref_t]
+    pi_all_kt = [np.exp(-eii/kT) for eii in e_all]
+    p_tot_kt = sum(pi_all_kt)
+    pi_all_kt = [pii/p_tot_kt for pii in pi_all_kt]
     
-    return xi_all, pi_all, e_all, pi_all_out, box_min, box_max
+    return np.stack(xi_all), pi_all_ref_t, e_all, pi_all_kt, box_min, box_max
 
 
 
@@ -79,7 +81,7 @@ def synthetic_msm(xi_all, e_all, min_spacing, kT):
                 if ei > ej:
                     trm[i,j] = (r1**(np.linalg.norm(xi_all[i]-xi_all[j])/min_spacing)) * np.exp(-(ei-ej)/kT)
                 else:
-                    trm[i,j] = r1
+                    trm[i,j] = r1**(np.linalg.norm(xi_all[i]-xi_all[j])/min_spacing)
                     
     #set self transition probabilities so that each column is normalized
     for k in range(len(e_all)):
@@ -98,8 +100,8 @@ class two_wells_decoy_valley():
 
     def __init__(self):
         
-        self.minima_coords   = [[0,0],[8,0],[0,1],  [1,1],  [1,2],  [2,2],  [3,2],  [4,2],  [5,2],  [6,2],  [7,2],  [8,1],  [0,-1], [1,-1], [1,-2], [2,-2], [3,-2], [4,-2], [5,-2]]
-        self.minima_energies = [[0,1],[0,1],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[2,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[2,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3]]
+        self.minima_coords   = [[0,0],[8,0],[0,1],  [1,1],  [1,2],  [2,2],  [3,2],  [4,2],  [5,2],  [6,2],  [7,2],  [7,1],  [8,1],  [0,-1], [1,-1], [1,-2], [2,-2], [3,-2], [4,-2], [5,-2]]
+        self.minima_energies = [[0,1],[0,1],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[2,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3],[1,0.3]]
         self.state_density = 200
         self.kT = .4
         self.noise_spectrum = "TBD"

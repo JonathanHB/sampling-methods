@@ -113,12 +113,16 @@ class unit_double_well(potential_well_1d):
     
     def macro_class(self, x):
         thr = 0.7 #1/np.sqrt(2)
-        if x <= -thr:
-            return 0
-        elif x >= thr:
-            return 1
-        else:
-            return -1
+        try:
+            if x[0] <= -thr:
+                return 0
+            elif x[0] >= thr:
+                return 1
+            else:
+                return -1
+        except Exception as e:
+            print(e)
+            print(x)
             
     def __init__(self):
         self.diffusion_coefficient = 1

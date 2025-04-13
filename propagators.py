@@ -55,10 +55,12 @@ def propagate_save1(system, kT, trj_coords, timestep, nsteps):
 #TODO make a propagator version that actually uses kT for testing replica exchange schemes
 def propagate_msm(system_dtmsm, kT, trj_coords, timestep, nsteps, save_period):
 
+    tia = []
     tca = []
 
     for tci in trj_coords:
         dt_trj = system_dtmsm.dtmsm.simulate(nsteps, start = tci, dt = save_period) #, seed=0
-        tca.append(np.array([system_dtmsm.x[dti] for dti in dt_trj]))
+        tia.append(dt_trj)
+        tca.append(np.stack([system_dtmsm.x[dti] for dti in dt_trj]))
 
-    return np.array(tca).transpose() #, dt_trj
+    return np.stack(tca, axis=0), np.stack(tia, axis=0)

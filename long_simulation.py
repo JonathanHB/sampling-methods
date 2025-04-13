@@ -66,7 +66,7 @@ def run_long_parallel_simulations(propagator, system, kT, dt, nsteps, save_perio
 
 def estimate_eq_pops_histogram(trjs, system, nbins):
 
-    binned_trj, bincenters, binwidth, actual_nbins = analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
+    binned_trj, bincenters, binwidth, actual_nbins, binbounds = analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
     binned_trj = np.array(binned_trj).flatten()
 
     #flatten trajectory since the order of the frames does not matter here
@@ -213,18 +213,23 @@ def __get_ha_transitions(trjs_discrete, macrostates_discrete, n_macrostates, lag
 #   multiplied by the number of macrostates, plus the ensemble index
 def get_ha_transitions(trjs, nbins, system, lag_time=1):
 
-    analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
-
+    #analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
+    trjs_discrete, bincenters, binwidth, actual_nbins, binbounds = analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
+    # print(len(trjs_discrete))
+    # print(len(trjs_discrete[0]))
+    # print(np.stack(trjs_discrete).shape)
+    
     #get bin boundaries
-    binbounds, bincenters, step = system.analysis_bins_1d(nbins)
+    #binbounds, bincenters, step = system.analysis_bins_1d(nbins)
 
     #bin trajectories in configurational space and assign the bins to macrostates
-    trjs_discrete = np.digitize(trjs, bins = binbounds).reshape((trjs.shape[0], trjs.shape[1]))
-    print(trjs_discrete.shape)
+    #trjs_discrete = np.digitize(trjs, bins = binbounds).reshape((trjs.shape[0], trjs.shape[1]))
+    #print(trjs_discrete.shape)
+    print([x for x in bincenters])
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
     #get a list of all the transitions
-    ha_transitions = __get_ha_transitions(trjs_discrete, macrostates_discrete, system.n_macrostates, lag_time)
+    ha_transitions = __get_ha_transitions(np.stack(trjs_discrete), macrostates_discrete, system.n_macrostates, lag_time)
 
     return ha_transitions
 

@@ -137,11 +137,10 @@ def digitize_to_voxel_bins(analysis_range, nbins, trjs):
     actual_nbins = np.product(nbins)
 
     prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
-    print(prods_higher)
     
     trjs_binned = [np.matmul(prods_higher, binned_by_dim) for binned_by_dim in binned_all]
 
-    return trjs_binned, bincenters_flat, binwidth, actual_nbins
+    return trjs_binned, bincenters_flat, binwidth, actual_nbins, binbounds
 
 
 #----------------------------------------------------------------------------------------------------------------
@@ -312,7 +311,6 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
 
 
 
-
 def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
     
     binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
@@ -333,3 +331,40 @@ def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
             else:
                 plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
 
+
+
+def plot_bootstrapping_results_nd(populations_all, system, kT, n_analysis_bins):
+    
+    binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
+
+    eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
+    eqp_sum = sum(eqp_analytic)
+    eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
+
+    plt.plot(bincenters, eqp_analytic, color="black")
+
+    colorlist = ["red", "green", "blue"]
+
+    for cx, method_data in enumerate(populations_all):
+        for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
+            
+            if mpei == -1:
+                plt.scatter(mci, mpi, color=colorlist[cx], marker=".")
+            else:
+                plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
+
+
+
+def plot_synth_landscape(sys, x_sampled, est_pops):
+
+    plt.figure(figsize=(10, 10))
+
+    vma = max(sys.p+est_pops)
+
+    #for tc, ep in zip(trj_coords, est_pops):
+    plt.scatter(x_sampled[:,0], x_sampled[:,1], c=est_pops, cmap='viridis', vmin=0, vmax=vma, s=100)
+    plt.scatter(x_sampled[:,0], x_sampled[:,1], c="white", s=50)
+    plt.scatter(sys.x[:,0], sys.x[:,1], c=sys.p, cmap='viridis', vmin=0, vmax=vma, s=20)
+
+    plt.axis("equal")
+    plt.show()
