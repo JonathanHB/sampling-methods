@@ -90,6 +90,7 @@ def print_mfpts_2states(mfpts, digits = 0):
 
 #----------------------------------------------------------------------------------------------------------------
 
+#deprecated for most purposes, use the construct_voxel_bins() and digitize_to_voxel_bins() functions instead
 def digitize_to_voxel_bins(analysis_range, nbins, trjs):
 
     ndim = len(analysis_range[0])
@@ -144,6 +145,86 @@ def digitize_to_voxel_bins(analysis_range, nbins, trjs):
 
 
 #----------------------------------------------------------------------------------------------------------------
+
+def construct_voxel_bins(analysis_range, nbins):
+
+    ndim = len(analysis_range[0])
+
+    boxlengths = [xmax-xmin for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+    boxcenters = [(xmax+xmin)/2 for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+
+    binwidths = []
+    for bl in boxlengths:
+        binwidths.append(bl*(nbins*np.product([bl/blj for blj in boxlengths]))**(-1/ndim))
+
+    #make bins the same size in each dimension, 
+    # preventing anisotropies from arising from the fact that the analysis box edge lengths may not be in an integer ratio
+    binwidth = np.mean(binwidths) 
+
+    #calculate bin centers and boundaries
+    binbounds = []
+    bincenters = []
+    nbins = []
+
+    for d in range(ndim):
+        nbins_d = int(np.ceil(boxlengths[d]/binwidth))
+        nbins.append(nbins_d+2)
+
+        rmin = boxcenters[d]-binwidth*nbins_d/2
+        rmax = boxcenters[d]+binwidth*nbins_d/2
+
+        binbounds.append(np.linspace(rmin, rmax, nbins_d+1))
+        bincenters.append(np.linspace(rmin-binwidth/2, rmax+binwidth/2, nbins_d+2))
+
+    bincenters_flat = list(itertools.product(*bincenters))
+
+    actual_nbins = np.product(nbins)
+    prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+
+    return bincenters_flat, binwidth, actual_nbins, binbounds, ndim, prods_higher
+
+#----------------------------------------------------------------------------------------------------------------
+
+#DEPRECATED; adjust arguments to match those below
+def bin_to_voxels(ndim, binbounds, nbins, trjs):
+
+    #bin trajectories in each dimension
+    binned_all = []
+
+    for trj in trjs:
+
+        binned_by_dim = []    
+        for d in range(ndim):
+            binned_by_dim.append(np.digitize([f[d] for f in trj], bins = binbounds[d]))
+        
+        binned_all.append(np.array(binned_by_dim))
+
+    prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+    
+    trjs_binned = [np.matmul(prods_higher, binned_by_dim) for binned_by_dim in binned_all]
+
+    return trjs_binned
+
+
+def bin_to_voxels_timeslice(ndim, binbounds, prods_higher, trjs):
+
+    #bin trajectories in each dimension
+    binned_all = []
+
+    for trj in trjs:
+
+        binned_by_dim = []    
+        for d in range(ndim):
+            binned_by_dim.append(np.digitize([trj[d]], bins = binbounds[d]))
+        
+        binned_all.append(np.array(binned_by_dim))
+    
+    trjs_binned = [np.matmul(prods_higher, binned_by_dim)[0] for binned_by_dim in binned_all]
+
+    return trjs_binned
+
+
+#----------------------------------------------------------------------------------------------------------------
 #construct a history augmented markov state model from a set of transitions
 
 #parameters
@@ -165,12 +246,15 @@ def digitize_to_voxel_bins(analysis_range, nbins, trjs):
 
 def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_TPM=False):
 
-    #for consiceness
+    #for conciseness
     nm = system.n_macrostates
 
     #get bin boundaries
-    binbounds, bincenters, step = system.analysis_bins_1d(nbins)
+    #binbounds, bincenters, step = system.analysis_bins_1d(nbins)
+    trjs_discrete, bincenters, binwidth, actual_nbins, binbounds = digitize_to_voxel_bins(system.standard_analysis_range, nbins, [[]])
 
+    #print("hamsm_analysis")
+    #print(bincenters)
     #assign the bins to macrostates
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
@@ -321,7 +405,7 @@ def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
 
     plt.plot(bincenters, eqp_analytic, color="black")
 
-    colorlist = ["red", "green", "blue"]
+    colorlist = ["red", "green", "blue", "orange", "purple", "yellow"]
 
     for cx, method_data in enumerate(populations_all):
         for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
@@ -333,25 +417,25 @@ def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
 
 
 
-def plot_bootstrapping_results_nd(populations_all, system, kT, n_analysis_bins):
+# def plot_bootstrapping_results_nd(populations_all, system, kT, n_analysis_bins):
     
-    binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
+#     binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
 
-    eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
-    eqp_sum = sum(eqp_analytic)
-    eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
+#     eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
+#     eqp_sum = sum(eqp_analytic)
+#     eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
 
-    plt.plot(bincenters, eqp_analytic, color="black")
+#     plt.plot(bincenters, eqp_analytic, color="black")
 
-    colorlist = ["red", "green", "blue"]
+#     colorlist = ["red", "green", "blue"]
 
-    for cx, method_data in enumerate(populations_all):
-        for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
+#     for cx, method_data in enumerate(populations_all):
+#         for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
             
-            if mpei == -1:
-                plt.scatter(mci, mpi, color=colorlist[cx], marker=".")
-            else:
-                plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
+#             if mpei == -1:
+#                 plt.scatter(mci, mpi, color=colorlist[cx], marker=".")
+#             else:
+#                 plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
 
 
 

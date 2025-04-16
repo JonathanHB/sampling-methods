@@ -11,6 +11,7 @@
 import numpy as np
 from sklearn.preprocessing import normalize
 from scipy.sparse.csgraph import connected_components
+import matplotlib.pyplot as plt
 
 #-----------------------------------------------------------------------------------------------------------------------
 #                                        MSM construction
@@ -189,6 +190,18 @@ maximum fractional error of any component = {maxerror}")
     return np.real(eig0c)
 
 
+def transitions_to_eq_probs(transitions, bincenters, show_TPM=False):
+    
+    tpm, states_in_order = transitions_2_msm(transitions)
+    if show_TPM:
+        plt.matshow(tpm)
+        plt.show()
+
+    eqp_msm = tpm_2_eqprobs(tpm)
+    x_msm = [bincenters[i] for i in states_in_order]
+
+    return x_msm, eqp_msm
+
 
 #-----------------------------------------------------------------------------------------------------------------------
 #                                        Mean first passage time calculations
@@ -245,11 +258,12 @@ def calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_
             #   note that all of this is necessarily in the starting ensemble
             eqp_init_macrostate = sum([eqpj[0] if macrostates_discrete[states_in_order[j] // nm] == starting_ms else 0 for j, eqpj in enumerate(eqp_msm)])
 
-            #normalize the rate by the equilibrium probability in the starting macrostate
-            rate /= eqp_init_macrostate
+            if eqp_init_macrostate != 0 and rate != 0:
+                #normalize the rate by the equilibrium probability in the starting macrostate
+                rate /= eqp_init_macrostate
 
-            #calculate the mean first passage time from the rate
-            mfpts[target_ms][starting_ms] = save_period/rate
+                #calculate the mean first passage time from the rate
+                mfpts[target_ms][starting_ms] = save_period/rate
 
 
     return mfpts

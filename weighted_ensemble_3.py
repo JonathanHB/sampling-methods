@@ -8,6 +8,7 @@ import sys
 import matplotlib.pyplot as plt
 import propagators
 import analysis
+import MSM_methods
 
 #parameters
 #   x_init: list of floats: coordinates of initial walkers
@@ -139,39 +140,14 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
             #duplicate simulations in bins with too few walkers
             elif len(indset) < walkers_per_bin and len(indset) > 0:
 
-                #if r%round(nrounds/10) == 0 and len(indset) == 1:
-                #    print(f"splitting {isi}")
-
                 #select walkers to duplicate
-                w_indset = [w_init[i] for i in indset] #if w_init[i] != 0 else sys.float_info.min
+                w_indset = [w_init[i] for i in indset]
 
                 duplicated_walkers = random.choices(indset, weights=w_indset, k = walkers_per_bin-len(indset))
-
-                #always split the heaviest walker
-                #walker_to_split = np.argmax(w_indset)
                 
                 #add coordinates and weights of walkers from this bin to the list for next round
                 # coordinates are unchanged for duplicated walkers; weights are reduced
                 for i in indset:
-                    # x_md.append(x_init[i])
-                    # e_md.append(e_init[i])                    
-                    
-                    # if i == walker_to_split and max(w_indset) < split_limit:
-                    #     #add halved weight for first child
-                    #     print(f"did not split at {x_init[i]}")
-
-                    # if i == walker_to_split and max(w_indset) >= split_limit:
-                    #     #add halved weight for first child
-                    #     w_md.append(w_init[i]/2)
-
-                    #     #add second child walker
-                    #     x_md.append(x_init[i])
-                    #     e_md.append(e_init[i])
-                    #     w_md.append(w_init[i]/2)
-
-                    # else:
-                    #     w_md.append(w_init[i])
-            
                     #add multiple copies of walkers to be duplicated with proportionally smaller weights
                     for j in range(1+duplicated_walkers.count(i)):
                         x_md.append(x_init[i])
@@ -179,47 +155,46 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
 
                         if w_init[i] >= split_limit:
                             #this is the normal WE algorithm
-                            #w_md.append(max(w_init[i]/(1+duplicated_walkers.count(i)), sys.float_info.min))
                             w_md.append(w_init[i]/(1+duplicated_walkers.count(i)))
                         else:
                             w_md.append(w_init[i])
                             break #do not duplicate too-light walkers
+
                             
             #merge simulations in bins with too many walkers
             elif len(indset) > walkers_per_bin:
                 #instead of doing what's below just merge the two lightest walkers to prevent probability from accumulating in heavier ones
                 
-                w_indset = [w_init[i] for i in indset]
-                weights_ranked = list(np.argsort(w_indset))
-                
-                #note that using argmin and index will yield different results when multiple walkers have the same weight
-                ind_lightest = weights_ranked.index(0)  
-                weight_lightest = w_indset[ind_lightest]
-                
-                ind_second_lightest = weights_ranked.index(1)
-                weight_second_lightest = w_indset[ind_second_lightest]
+                #total bin weight; does not change because merging operations preserve weight
+                w_bin = sum([w_init[i] for i in indset])
+            
+                #deepcopy; may be unnecessary
+                local_indset = [i for i in indset]
+                w_local_indset = [w_init[i] for i in indset]
 
-                #remove no walker if none meet the criteria below
-                removed_walker = -1
-                
-                if weight_lightest < merge_limit:
-                
-                    weights_pair = weight_lightest + weight_second_lightest
-                    inds_removal = [ind_lightest, ind_second_lightest]
-                    weights_removal = [weight_lightest/weights_pair, weight_second_lightest/weights_pair]
-    
-                    removed_walker = random.choices(inds_removal, weights=weights_removal, k = 1)[0]
+                #remove walkers until only walkers_per_bin remain
+                for i in range(len(indset)-walkers_per_bin):
+                    
+                    #weights for walker elimination from Huber and Kim 1996 appendix A
+                    w_removal = [(w_bin - w_init[i])/w_bin for i in local_indset]
+                    #pick 1 walker to remove, most likely one with a low weight
+                    #the [0] eliminates an unnecessary list layer
+                    removed_walker = random.choices([j for j in range(len(local_indset))], weights=w_removal, k = 1)[0]
+                    
+                    #remove the walker
+                    local_indset = [i for ii, i in enumerate(local_indset) if ii != removed_walker ]
+                    removed_weight = w_local_indset[removed_walker]
+                    w_local_indset = [i for ii, i in enumerate(w_local_indset) if ii != removed_walker ]
+                    
+                    #pick another walker to gain the removed walker's probability
+                    #selection chance is proportional to existing weight
+                    recipient_walker = random.choices([j for j in range(len(local_indset))], weights=w_local_indset, k = 1)[0]
+                    w_local_indset[recipient_walker] += removed_weight
 
-                for ii, i in enumerate(indset):
-                    if ii != removed_walker:
-                        x_md.append(x_init[i])
-                        e_md.append(e_init[i])
-
-                        #add the removed walker's weight to the walker with which it was merged
-                        if ii in [ind_lightest, ind_second_lightest] and removed_walker != -1:
-                            w_md.append(w_init[i] + w_init[indset[removed_walker]])
-                        else:
-                            w_md.append(w_init[i])
+                for i in range(walkers_per_bin):
+                    x_md.append(x_init[local_indset[i]])
+                    e_md.append(e_init[local_indset[i]])
+                    w_md.append(w_local_indset[i])
 
         #----------------------------------------------------------------------
         #run dynamics
@@ -251,7 +226,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         n_trans_by_round.append(len(transitions))
 
         
-    return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round
+    return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat
 
 
 #wrapper function for weighted_ensemble() that initializes the walkers
@@ -299,7 +274,7 @@ def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit,
 
     #run weighted ensemble with brownian dynamics
     #put this on multiple lines
-    x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round \
+    x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat \
     = weighted_ensemble_start(\
                         x_init_val,\
                         nrounds,\
@@ -327,3 +302,48 @@ def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit,
     # mfpts_we_hamsm.append(np.mean(inter_well_mpfts_we_hamsm))
 
     return nsteps*aggregate_walkers, x_hamsm_sampled, eqp_hamsm_sampled, mfpts_hamsm
+
+
+
+def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, nsteps, n_analysis_bins):
+    
+    #N = 500             #total number of walkers within binrange
+    #nbins = 40         #total number of bins within binrange 
+    #nbins should match the value above, at least for analysis; make a separate n_bins_analysis variable
+
+    walkers_per_bin = int(round(n_parallel/n_analysis_bins))
+    print(f"Each bin can hold up to {walkers_per_bin} walkers, for a total of up to about {walkers_per_bin*(n_analysis_bins)} walkers")
+
+    #binrange = system.standard_analysis_range 
+
+    #progress coordinate range within which to bin simulations
+                        #this should extend well past the stall point for examination of the WE stall force
+                        #the area past either end of binrange is a bin extending to either + or - inf, yielding a total of nbins+2 bins
+    n_macrostates=1
+            
+    #nsteps = save_period        #round length; to match long simulations since MFPT = f(lag time)
+    nrounds = int(round(aggregate_simulation_limit/(n_parallel*nsteps)))  #number of WE rounds to run
+
+    x_init_val = system.standard_init_coord
+
+    #run weighted ensemble with brownian dynamics
+    #put this on multiple lines
+    x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat \
+    = weighted_ensemble_start(\
+                        x_init_val,\
+                        nrounds,\
+                        n_analysis_bins,\
+                        walkers_per_bin,\
+                        system, propagators.propagate_save1,\
+                        [system, kT, dt, nsteps],\
+                        system.ensemble_class,\
+                        n_macrostates,\
+                        ha_binning=False)
+
+
+    aggregate_walkers = len([j for i in xtrj for j in i])
+
+    #build MSM
+    x_msm, eqp_msm = MSM_methods.transitions_to_eq_probs(transitions, bincenters_flat, show_TPM=False)
+
+    return nsteps*aggregate_walkers, x_msm, eqp_msm, []

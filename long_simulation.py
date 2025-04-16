@@ -146,6 +146,40 @@ def calc_mfpt(macrostate_classifier, n_macrostates, save_period, trajectories):
 
 
 #---------------------------------------------------------------------------------
+def __get_transitions(trjs_discrete, lag_time):
+
+    transitions = []
+
+    for trj in trjs_discrete:
+        
+        transitions_trj = []
+        #print(trj[0])
+
+        #get initial state
+        #last_ensemble = macrostates_discrete[trj[0]]
+        #print(trj.shape)
+        for i in range(len(trj)-lag_time):
+    
+            #current_macrostate = macrostates_discrete[trj[i+lag_time]]
+
+            #if a macrostate is reached, that is now the ensemble. If in the no man's land, remain in the ensemble of the last macrostate
+            # if current_macrostate == -1:
+            #     current_ensemble = last_ensemble
+            # else:
+            #     current_ensemble = current_macrostate
+
+            #record transition
+            transitions.append([trj[i], trj[i+lag_time]])
+
+            #update buffer
+            #last_ensemble = current_ensemble
+
+        transitions += transitions_trj
+
+    return transitions
+
+
+#---------------------------------------------------------------------------------
 #get a list of history augmented transitions from a list of parallel trajectories
 
 #parameters:
@@ -225,7 +259,8 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
     #bin trajectories in configurational space and assign the bins to macrostates
     #trjs_discrete = np.digitize(trjs, bins = binbounds).reshape((trjs.shape[0], trjs.shape[1]))
     #print(trjs_discrete.shape)
-    print([x for x in bincenters])
+    #print("get_ha_transitions")
+    #print([x for x in bincenters])
     macrostates_discrete = [system.macro_class(x) for x in bincenters]
 
     #get a list of all the transitions
@@ -305,3 +340,27 @@ def long_simulation_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, n
     x, p, xs, ps, x_ens, p_ens, mfpts = analysis.hamsm_analysis(ha_transitions, n_analysis_bins, system, save_period, lag_time=1, show_TPM=False)
 
     return nsteps*n_parallel, xs, ps, mfpts
+
+
+
+#---------------------------------------------------------------------------------
+
+def long_simulation_msm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins):
+
+    #run simulation
+    nsteps = int(round(aggregate_simulation_limit/n_parallel))
+    long_trjs = run_long_parallel_simulations(propagators.propagate, system, kT, dt, nsteps, save_period, n_parallel)
+
+    #analysis
+    #note that lag time is measured in saved frames
+    #ha_transitions = get_ha_transitions(long_trjs, n_analysis_bins, system, lag_time=1)
+    
+    trjs_discrete, bincenters, binwidth, actual_nbins, binbounds = analysis.digitize_to_voxel_bins(system.standard_analysis_range, n_analysis_bins, long_trjs)
+
+    transitions=__get_transitions(np.stack(trjs_discrete), lag_time=1)
+
+    #x, p, xs, ps, x_ens, p_ens, mfpts = analysis.hamsm_analysis(ha_transitions, n_analysis_bins, system, save_period, lag_time=1, show_TPM=False)
+    xs, ps = MSM_methods.transitions_to_eq_probs(transitions, bincenters, show_TPM=False)
+
+
+    return nsteps*n_parallel, xs, ps, []
