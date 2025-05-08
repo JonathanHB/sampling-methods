@@ -39,6 +39,27 @@ def propagate(system, kT, trj_coords, timestep, nsteps, save_period):
     return trj_out
 
 
+#nsteps must be an integer multiple of save_period
+def propagate_mtd(system, kT, trj_coords, timestep, nsteps, save_period, grid):
+  
+    nd = np.array(trj_coords.shape)   #this includes both the number of trajectories and the number of dimensions
+    D = system.diffusion_coefficient
+    
+    trj_out = []
+    for i in range(nsteps//save_period):
+    
+        for step in range(save_period):
+            trj_coords += D/kT * (system.F(trj_coords) + grid.compute_forces(trj_coords)) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
+        
+        trj_out.append(trj_coords.copy())
+        grid.update(trj_coords, [grid.rate for i in trj_coords])
+        #grid.compute_forces(trj_coords)
+
+    #print(trj_out[1].shape)
+    return trj_out, grid
+
+
+
 #same as propagate() but outputs only the last frame; 
 #  avoids an extra layer of for loops when running WE
 def propagate_save1(system, kT, trj_coords, timestep, nsteps):

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import propagators
 import analysis
 import MSM_methods
+import metadynamics
 
 #parameters
 #   x_init: list of floats: coordinates of initial walkers
@@ -43,7 +44,7 @@ import MSM_methods
 #      4. log data of interest
 #      5. pass coordinates, weights, and ensembles to next round 
 
-def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, propagator, prop_params, macrostate_classifier, n_macrostates, ha_binning=False):
+def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, propagator, prop_params, macrostate_classifier, n_macrostates, grid, ha_binning=False):
 
     split_limit = 2.00001*sys.float_info.min #0.0002
     merge_limit = 1 #effectively no limit
@@ -57,7 +58,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
     #else:
     #    binbounds = np.linspace(binrange[0], binrange[1], (nbins+1)*n_macrostates)
     
-    bincenters_flat, binwidth, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins)
+    bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins)
 
     #print(len(binbounds))
     
@@ -95,7 +96,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         #TODO I think this function call is redundant with one of the two similar calls below. A buffer variable might be needed but that would be fine.
         #print(nbins)
         #print(binbounds)
-        config_bin_inds = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
+        config_bin_inds, nd_inds = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
 
         if not ha_binning:
             bin_inds = config_bin_inds
@@ -210,12 +211,15 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         wtrj.append(w_init)
         etrj.append(e_init)
         
+        #update grid
+        grid.update(x_init, w_init)
+
         #bin transitions and add them to the transition list
         #TODO This could be made more efficient by separating digitize_voxel_bins into a method to define the bins and another to bin the trajectory.
         #     The former would only need to run once.
         #     we also need a variant that bins a single time slice to fix current bug
-        bin_inds_1 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_md)
-        bin_inds_2 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
+        bin_inds_1, nd_inds_1 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_md)
+        bin_inds_2, nd_inds_2 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
 
         # bin_inds_1 = np.digitize(x_md, binbounds) #not the same as bin_inds
         # bin_inds_2 = np.digitize(x_init, binbounds)
@@ -226,7 +230,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         n_trans_by_round.append(len(transitions))
 
         
-    return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat
+    return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat, grid
 
 
 #wrapper function for weighted_ensemble() that initializes the walkers
@@ -236,6 +240,8 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, system,
     x_init = np.array([x_init_val for element in range(walkers_per_bin)])
     w_init = [1/walkers_per_bin for element in range(walkers_per_bin)]
     
+    grid = metadynamics.grid(system.standard_analysis_range, nbins)
+
     #run weighted ensemble with brownian dynamics
     #put this on multiple lines
     return weighted_ensemble(\
@@ -248,7 +254,9 @@ def weighted_ensemble_start(x_init_val, nrounds, nbins, walkers_per_bin, system,
                         prop_params,\
                         macrostate_classifier,\
                         n_macrostates,\
-                        ha_binning=False)
+                        grid,\
+                        ha_binning=False
+                        )
 
 
 def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, nsteps, n_analysis_bins):
@@ -305,7 +313,7 @@ def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit,
 
 
 
-def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, nsteps, n_analysis_bins):
+def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, nsteps, n_analysis_bins, n_timepoints):
     
     #N = 500             #total number of walkers within binrange
     #nbins = 40         #total number of bins within binrange 
@@ -314,36 +322,82 @@ def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n
     walkers_per_bin = int(round(n_parallel/n_analysis_bins))
     print(f"Each bin can hold up to {walkers_per_bin} walkers, for a total of up to about {walkers_per_bin*(n_analysis_bins)} walkers")
 
-    #binrange = system.standard_analysis_range 
-
-    #progress coordinate range within which to bin simulations
-                        #this should extend well past the stall point for examination of the WE stall force
-                        #the area past either end of binrange is a bin extending to either + or - inf, yielding a total of nbins+2 bins
     n_macrostates=1
             
-    #nsteps = save_period        #round length; to match long simulations since MFPT = f(lag time)
-    nrounds = int(round(aggregate_simulation_limit/(n_parallel*nsteps)))  #number of WE rounds to run
+    nrounds = int(round(aggregate_simulation_limit/(n_parallel*nsteps*n_timepoints)))  #number of WE rounds to run
+
+    #data collection
+    aggregate_walkers = 0
+    aggregate_walkers_t = []
+    
+    aggregate_transitions = []
+
+    x_msm_t = []
+    eqp_msm_t = []
 
     x_init_val = system.standard_init_coord
+    x_init = np.array([x_init_val for element in range(walkers_per_bin)])
+    w_init = [1/walkers_per_bin for element in range(walkers_per_bin)]
 
-    #run weighted ensemble with brownian dynamics
-    #put this on multiple lines
-    x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat \
-    = weighted_ensemble_start(\
-                        x_init_val,\
-                        nrounds,\
-                        n_analysis_bins,\
-                        walkers_per_bin,\
-                        system, propagators.propagate_save1,\
-                        [system, kT, dt, nsteps],\
-                        system.ensemble_class,\
-                        n_macrostates,\
-                        ha_binning=False)
+    grid = metadynamics.grid(system.standard_analysis_range, n_analysis_bins)
+
+    for tp in range(n_timepoints):
+        #run weighted ensemble with brownian dynamics
+        x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat, grid \
+        = weighted_ensemble(\
+                            x_init,\
+                            w_init,\
+                            nrounds,\
+                            n_analysis_bins,\
+                            walkers_per_bin,\
+                            system, propagators.propagate_save1,\
+                            [system, kT, dt, nsteps],\
+                            system.ensemble_class,\
+                            n_macrostates,\
+                            grid,\
+                            ha_binning=False)
+        # print("------------------------------------------------------")
+        # print(tp)
+        # print(x_init)
+        # print(w_init)
+        # print(transitions)
 
 
-    aggregate_walkers = len([j for i in xtrj for j in i])
+        aggregate_walkers += len([j for i in xtrj for j in i])*nsteps
+        aggregate_walkers_t.append(aggregate_walkers)
+        aggregate_transitions += transitions
+
+        x_msm, eqp_msm = MSM_methods.transitions_to_eq_probs(aggregate_transitions, bincenters_flat, show_TPM=False)
+        x_msm_t.append(x_msm)
+        eqp_msm_t.append(eqp_msm)
+
+        #print(grid.grid)
+        plt.plot(bincenters_flat, grid.grid)
+        plt.xlabel("x-coordinate")
+        plt.ylabel("metadynamics potential")
+
+    plt.show()
+
+    return aggregate_walkers_t, x_msm_t, eqp_msm_t, [[]]
+
+    # #run weighted ensemble with brownian dynamics
+    # #put this on multiple lines
+    # x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat \
+    # = weighted_ensemble_start(\
+    #                     x_init_val,\
+    #                     nrounds,\
+    #                     n_analysis_bins,\
+    #                     walkers_per_bin,\
+    #                     system, propagators.propagate_save1,\
+    #                     [system, kT, dt, segment_length],\
+    #                     system.ensemble_class,\
+    #                     n_macrostates,\
+    #                     ha_binning=False)
+
+
+    #aggregate_walkers = len([j for i in xtrj for j in i])
 
     #build MSM
-    x_msm, eqp_msm = MSM_methods.transitions_to_eq_probs(transitions, bincenters_flat, show_TPM=False)
+    #x_msm, eqp_msm = MSM_methods.transitions_to_eq_probs(transitions, bincenters_flat, show_TPM=False)
 
-    return nsteps*aggregate_walkers, x_msm, eqp_msm, []
+    #return nsteps*aggregate_walkers, x_msm, eqp_msm, []

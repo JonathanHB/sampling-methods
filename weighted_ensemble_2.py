@@ -56,7 +56,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
     #else:
     #    binbounds = np.linspace(binrange[0], binrange[1], (nbins+1)*n_macrostates)
     
-    bincenters_flat, binwidth, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins)
+    bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins)
 
     #print(len(binbounds))
     
@@ -94,7 +94,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         #TODO I think this function call is redundant with one of the two similar calls below. A buffer variable might be needed but that would be fine.
         #print(nbins)
         #print(binbounds)
-        config_bin_inds = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
+        config_bin_inds, nd_inds = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
 
         if not ha_binning:
             bin_inds = config_bin_inds
@@ -239,8 +239,8 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         #TODO This could be made more efficient by separating digitize_voxel_bins into a method to define the bins and another to bin the trajectory.
         #     The former would only need to run once.
         #     we also need a variant that bins a single time slice to fix current bug
-        bin_inds_1 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_md)
-        bin_inds_2 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
+        bin_inds_1, nd_inds_1 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_md)
+        bin_inds_2, nd_inds_2 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
 
         # bin_inds_1 = np.digitize(x_md, binbounds) #not the same as bin_inds
         # bin_inds_2 = np.digitize(x_init, binbounds)
