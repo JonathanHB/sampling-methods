@@ -56,33 +56,30 @@ def run_long_parallel_simulations(propagator, system, kT, dt, nsteps, save_perio
 
 def resume_parallel_simulations(propagator, system, kT, dt, nsteps, save_period, prev_trj):
 
+    #x_init is modified by being fed in to the propagator
     x_init = np.array([xii[-1] for xii in prev_trj])
     
     #propagate
     long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period)).transpose(1,0,2)
-
-    #x_init is modified by being fed in to the propagator
-    #x_init_2 = np.array([xii[-1] for xii in prev_trj]).reshape((len(prev_trj), 1, len(system.standard_init_coord)))
 
     #include the starting frame
     #'1' here is not a magic number; it instead reflects the fact that the starting coordinate is a single frame long
     return np.concatenate((prev_trj, long_trjs), axis=1) 
 
 
-def resume_parallel_simulations_mtd(propagator, system, kT, dt, nsteps, save_period, prev_trj, grid):
+def resume_parallel_simulations_mtd(propagator, system, kT, dt, nsteps, save_period, prev_trj, prev_weights, grid):
 
+    #x_init is modified by being fed in to the propagator
     x_init = np.array([xii[-1] for xii in prev_trj])
     
     #propagate
-    long_trjs, grid = propagator(system, kT, x_init, dt, nsteps, save_period, grid)
-    long_trjs = np.array(long_trjs).transpose(1,0,2)
-
-    #x_init is modified by being fed in to the propagator
-    #x_init_2 = np.array([xii[-1] for xii in prev_trj]).reshape((len(prev_trj), 1, len(system.standard_init_coord)))
+    long_trjs, trj_weights, grid = propagator(system, kT, x_init, dt, nsteps, save_period, grid)
+    long_trjs = np.array(long_trjs).transpose(1,0,2) # should we just do this in the propagator?
+    trj_weights = np.array(trj_weights).transpose()
 
     #include the starting frame
     #'1' here is not a magic number; it instead reflects the fact that the starting coordinate is a single frame long
-    return np.concatenate((prev_trj, long_trjs), axis=1), grid
+    return np.concatenate((prev_trj, long_trjs), axis=1), np.concatenate((prev_weights, trj_weights), axis=1), grid
 #---------------------------------------------------------------------------------
 #estimate the equilibrium populations from a set of parallel trajectories by counting up where the system spends its time
 # parameters:
@@ -96,30 +93,30 @@ def resume_parallel_simulations_mtd(propagator, system, kT, dt, nsteps, save_per
 # note that the first and last bins extend to -inf and inf respectively, 
 #   but the bin centers are placed as if they were spaced equally to the other bins
 
-def estimate_eq_pops_histogram(trjs, system, nbins):
+def estimate_eq_pops_histogram(trjs, system, nbins, weights=[]):
 
+    #construct bins and bin trajectory
     bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins)
     binned_trj = analysis.bin_to_voxels(ndim, binbounds, prods_higher, trjs)
     #binned_trj, bincenters, binwidth, actual_nbins, binbounds = analysis.digitize_to_voxel_bins(system.standard_analysis_range, nbins, trjs)
     binned_trj = np.array(binned_trj).flatten()
 
-    #flatten trajectory since the order of the frames does not matter here
-    trj_flat = trjs.flatten()
 
-    # define bins
-    #binbounds, bincenters, step = system.analysis_bins_1d(nbins)
-    #actual_nbins = nbins
-    #bin trajectory
-
-    #note that digitize reserves the index 0 for entries below the first bin, 
-    # but in this case the bins have been constructed so that all entries lie within the explicit bin range
-    # so the first and last bins of eq_pops should be empty
-    #binned_trj = np.digitize(trj_flat, bins = binbounds)
-
+    #count up probability in each bin
     eq_pops = np.zeros(actual_nbins)
-    for b in binned_trj:
-        eq_pops[b] += 1/len(trj_flat)
+    
+    if len(weights) == 0:
+        for b in binned_trj:
+            eq_pops[b] += 1/binned_trj.shape[0]
+    
+    else:
+        weights_flat = np.array(weights).flatten()
+        wt = np.sum(weights_flat)
+        for b, w in zip(binned_trj, weights_flat):
+            eq_pops[b] += w/wt
 
+
+    #account for the fact that 
     bins_sampled = np.sort(np.unique(binned_trj))
     bincenters_sampled = [bincenters_flat[i] for i in bins_sampled]
     eqp_sampled = [eq_pops[i] for i in bins_sampled]
@@ -330,9 +327,10 @@ def get_ha_transitions(trjs, nbins, system, lag_time=1):
 # aggregate number of simulation steps
 
 
-def long_simulation_histogram_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins, n_timepoints):
+def long_simulation_histogram_analysis(system, kT, dt, aggregate_simulation_limit, molecular_time_limit, save_period, n_analysis_bins, n_timepoints):
     
     #run simulation
+    n_parallel = int(round(aggregate_simulation_limit/molecular_time_limit))
     nsteps = int(round(aggregate_simulation_limit/(n_parallel*n_timepoints)))
 
     #set initial positions
@@ -367,9 +365,10 @@ def long_simulation_histogram_analysis(system, kT, dt, aggregate_simulation_limi
 # METADYNAMICS simulation
 #------------------------------------------------------------------------------------
 
-def long_simulation_histogram_analysis_mtd(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins, n_timepoints):
+def long_simulation_histogram_analysis_mtd(system, kT, dt, aggregate_simulation_limit, molecular_time_limit, save_period, n_analysis_bins, n_timepoints):
     
     #run simulation
+    n_parallel = int(round(aggregate_simulation_limit/molecular_time_limit))
     nsteps = int(round(aggregate_simulation_limit/(n_parallel*n_timepoints)))
 
     #set initial positions
@@ -380,7 +379,9 @@ def long_simulation_histogram_analysis_mtd(system, kT, dt, aggregate_simulation_
 
     long_trjs = np.array([sim_init_coord for element in range(n_parallel)]).reshape((n_parallel, 1, len(system.standard_init_coord)))
 
-    grid = metadynamics.grid(system.standard_analysis_range, n_analysis_bins, rate = 0.1)
+    trj_weights = np.repeat(1/n_parallel, n_parallel).reshape((n_parallel, 1))
+
+    grid = metadynamics.grid(system.standard_analysis_range, n_analysis_bins, rate = 0.005)
 
     agg_times = []
     xs_t = []
@@ -388,20 +389,20 @@ def long_simulation_histogram_analysis_mtd(system, kT, dt, aggregate_simulation_
     mfpts_t = []
 
     for tp in range(n_timepoints):
-        long_trjs, grid = resume_parallel_simulations_mtd(propagators.propagate_mtd, system, kT, dt, nsteps, save_period, long_trjs, grid)
+        long_trjs, trj_weights, grid = resume_parallel_simulations_mtd(propagators.propagate_mtd, system, kT, dt, nsteps, save_period, long_trjs, trj_weights, grid)
 
         #analysis
-        x, p, xs, ps = estimate_eq_pops_histogram(long_trjs, system, n_analysis_bins)
-        transitions, mfpts = calc_mfpt(system.macro_class, system.n_macrostates, save_period, long_trjs)
+        x, p, xs, ps = estimate_eq_pops_histogram(long_trjs, system, n_analysis_bins, trj_weights)
+        #transitions, mfpts = calc_mfpt(system.macro_class, system.n_macrostates, save_period, long_trjs)
 
         agg_times.append(nsteps*n_parallel*(tp+1))
         xs_t.append(xs)
         ps_t.append(ps)
-        mfpts_t.append(mfpts)
+        mfpts_t.append([1,1,1]) #boilerplate
 
-        plt.plot(grid.bincenters, grid.grid)
+        #plt.plot(grid.bincenters, grid.grid)
 
-    plt.show()
+    #plt.show()
     return agg_times, xs_t, ps_t, mfpts_t
 
 
@@ -428,9 +429,10 @@ def long_simulation_histogram_analysis_mtd(system, kT, dt, aggregate_simulation_
 #    #consider returning transition counts as well to allow for comparison of the number of independent transitions, 
 #    which at least in some cases is probably a good proxy for sampling quality
 
-def long_simulation_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins):
+def long_simulation_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, molecular_time_limit, save_period, n_analysis_bins):
 
     #run simulation
+    n_parallel = int(round(aggregate_simulation_limit/molecular_time_limit))
     nsteps = int(round(aggregate_simulation_limit/n_parallel))
     long_trjs = run_long_parallel_simulations(propagators.propagate, system, kT, dt, nsteps, save_period, n_parallel)
 
@@ -446,11 +448,12 @@ def long_simulation_hamsm_analysis(system, kT, dt, aggregate_simulation_limit, n
 #---------------------------------------------------------------------------------
 
 
-def long_simulation_msm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins, n_timepoints):
+def long_simulation_msm_analysis(system, kT, dt, aggregate_simulation_limit, molecular_time_limit, save_period, n_analysis_bins, n_timepoints):
 
     bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, n_analysis_bins)
 
     #run simulation
+    n_parallel = 10 #int(round(aggregate_simulation_limit/molecular_time_limit))
     nsteps = int(round(aggregate_simulation_limit/(n_parallel*n_timepoints)))
 
     #set initial positions

@@ -45,18 +45,24 @@ def propagate_mtd(system, kT, trj_coords, timestep, nsteps, save_period, grid):
     nd = np.array(trj_coords.shape)   #this includes both the number of trajectories and the number of dimensions
     D = system.diffusion_coefficient
     
+    grid_rates = [grid.rate for i in trj_coords]
+
     trj_out = []
+    w_out = []
+    
     for i in range(nsteps//save_period):
     
         for step in range(save_period):
             trj_coords += D/kT * (system.F(trj_coords) + grid.compute_forces(trj_coords)) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
         
         trj_out.append(trj_coords.copy())
-        grid.update(trj_coords, [grid.rate for i in trj_coords])
+        w_out.append(grid.weights(trj_coords, kT))
+        
+        grid.update(trj_coords, grid_rates)
         #grid.compute_forces(trj_coords)
 
     #print(trj_out[1].shape)
-    return trj_out, grid
+    return trj_out, w_out, grid
 
 
 

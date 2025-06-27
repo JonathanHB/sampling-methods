@@ -3,6 +3,7 @@ import itertools
 import analysis
 import sys
 
+#idea: what if we ran metadynamics with evaporating/eroding gaussians? Like if every new gaussian had the same weight but old ones gradually shrunk.
 
 #METHOD OUTLINE
 #objects:
@@ -61,7 +62,21 @@ class grid():
 
         bin_inds, nd_inds = analysis.bin_to_voxels_timeslice(self.ndim, self.binbounds, self.prods_higher, trjs)
 
+        #        extract the force at the grid cell occupied by each trajectory frame
+        #We have a 3d array (of force vectors at each grid cell) and want to extract specified 1d columns as a list or array of 1d vectors (which are the forces on each frame).
+        #The 2d coordinates of the column of interest (on the face of the 3d array) are given by nd_inds.
+        #the columns to be extracted extend along the 0th axis of the array.
+        #This code initially extracts d lists of the dth component of every output vector, 
+        # which are then transposed to get a list of output vectors which are each of length d.
         #see https://stackoverflow.com/questions/69865664/get-values-from-an-array-given-a-list-of-coordinates-locations-with-numpy
         forces = np.array([fgc.take(np.ravel_multi_index(nd_inds.T, fgc.shape)) for fgc in self.forcegrids]).transpose()
 
         return forces
+    
+    #get the metadynamics energy and corresponding weight at each grid point
+    def weights(self, trjs, kT):
+
+        bin_inds, nd_inds = analysis.bin_to_voxels_timeslice(self.ndim, self.binbounds, self.prods_higher, trjs)
+        energies = self.grid.take(np.ravel_multi_index(nd_inds.T, self.grid.shape))
+        
+        return [np.exp(ei/kT) for ei in energies]

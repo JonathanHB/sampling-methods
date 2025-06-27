@@ -44,7 +44,7 @@ import metadynamics
 #      4. log data of interest
 #      5. pass coordinates, weights, and ensembles to next round 
 
-def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, propagator, prop_params, macrostate_classifier, n_macrostates, grid, ha_binning=False):
+def weighted_ensemble(x_init, w_init, nrounds, nbins_in, walkers_per_bin, system, propagator, prop_params, macrostate_classifier, n_macrostates, grid, ha_binning=False):
 
     split_limit = 2.00001*sys.float_info.min #0.0002
     merge_limit = 1 #effectively no limit
@@ -58,7 +58,11 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
     #else:
     #    binbounds = np.linspace(binrange[0], binrange[1], (nbins+1)*n_macrostates)
     
-    bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins)
+    #variable-width bins for WE
+    bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = analysis.construct_voxel_bins(system.standard_analysis_range, nbins_in)
+
+    #uniform bins for MSM construction
+    bincenters_flat_msm, binwidth_msm, nbin_msm, actual_nbins_msm, binbounds_msm, ndim_msm, prods_higher_msm = analysis.construct_voxel_bins(system.standard_analysis_range, nbins_in)
 
     #print(len(binbounds))
     
@@ -84,8 +88,8 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         
     for r in range(nrounds):
         
-        if r%round(nrounds/10) == 0:
-            print(r)
+        if r%max(round(nrounds/10), 1) == 0:
+            print(f"WE round {r}")
         #print("-----")
    
         #----------------------------------------------------------------------
@@ -96,7 +100,7 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         #TODO I think this function call is redundant with one of the two similar calls below. A buffer variable might be needed but that would be fine.
         #print(nbins)
         #print(binbounds)
-        config_bin_inds, nd_inds = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
+        config_bin_inds, nd_inds = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, np.array(x_init))
 
         if not ha_binning:
             bin_inds = config_bin_inds
@@ -214,23 +218,22 @@ def weighted_ensemble(x_init, w_init, nrounds, nbins, walkers_per_bin, system, p
         #update grid
         grid.update(x_init, w_init)
 
-        #bin transitions and add them to the transition list
-        #TODO This could be made more efficient by separating digitize_voxel_bins into a method to define the bins and another to bin the trajectory.
-        #     The former would only need to run once.
-        #     we also need a variant that bins a single time slice to fix current bug
-        bin_inds_1, nd_inds_1 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_md)
-        bin_inds_2, nd_inds_2 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, x_init)
+        #bin transitions into WE bins
+        bin_inds_1, nd_inds_1 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, np.array(x_md))
+        bin_inds_2, nd_inds_2 = analysis.bin_to_voxels_timeslice(ndim, binbounds, prods_higher, np.array(x_init))
 
-        # bin_inds_1 = np.digitize(x_md, binbounds) #not the same as bin_inds
-        # bin_inds_2 = np.digitize(x_init, binbounds)
         
-        transitions +=  [[b1,b2] for b1,b2 in zip(bin_inds_1, bin_inds_2)]
-        hamsm_transitions += [[b1*n_macrostates+e1,b2*n_macrostates+e2] for b1,b2,e1,e2 in zip(bin_inds_1, bin_inds_2, e_md, e_init)]
+        #bin transitions into MSM states
+        bin_inds_1_msm, nd_inds_1_msm = analysis.bin_to_voxels_timeslice(ndim_msm, binbounds_msm, prods_higher_msm, np.array(x_md))
+        bin_inds_2_msm, nd_inds_2_msm = analysis.bin_to_voxels_timeslice(ndim_msm, binbounds_msm, prods_higher_msm, np.array(x_init))
+
+        transitions +=  [[b1,b2] for b1,b2 in zip(bin_inds_1_msm, bin_inds_2_msm)]
+        hamsm_transitions += [[b1*n_macrostates+e1,b2*n_macrostates+e2] for b1,b2,e1,e2 in zip(bin_inds_1_msm, bin_inds_2_msm, e_md, e_init)]
         
         n_trans_by_round.append(len(transitions))
 
         
-    return x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat, grid
+    return x_init, e_init, w_init, binbounds_msm, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat_msm, grid
 
 
 #wrapper function for weighted_ensemble() that initializes the walkers
@@ -313,18 +316,25 @@ def weighted_ensemble_hamsm_analysis(system, kT, dt, aggregate_simulation_limit,
 
 
 
-def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n_parallel, nsteps, n_analysis_bins, n_timepoints):
+def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, molecular_time_limit, nsteps, n_analysis_bins, n_timepoints):
     
     #N = 500             #total number of walkers within binrange
     #nbins = 40         #total number of bins within binrange 
     #nbins should match the value above, at least for analysis; make a separate n_bins_analysis variable
 
-    walkers_per_bin = int(round(n_parallel/n_analysis_bins))
-    print(f"Each bin can hold up to {walkers_per_bin} walkers, for a total of up to about {walkers_per_bin*(n_analysis_bins)} walkers")
+    walkers_per_bin = 4
+    #walkers_per_bin = int(round(n_parallel/n_analysis_bins))
+    print(f"Each bin can hold up to {walkers_per_bin} walkers, for a total of up to about {walkers_per_bin*n_analysis_bins} walkers")
 
     n_macrostates=1
-            
-    nrounds = int(round(aggregate_simulation_limit/(n_parallel*nsteps*n_timepoints)))  #number of WE rounds to run
+    
+    nrounds = int(round(aggregate_simulation_limit/(walkers_per_bin*n_analysis_bins*nsteps*n_timepoints)))  #number of WE rounds to run
+
+    if nrounds*n_timepoints*nsteps > molecular_time_limit:
+        print("requested too much molecular time")
+
+    print(nrounds)
+    print(nsteps)
 
     #data collection
     aggregate_walkers = 0
@@ -342,6 +352,7 @@ def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n
     grid = metadynamics.grid(system.standard_analysis_range, n_analysis_bins)
 
     for tp in range(n_timepoints):
+
         #run weighted ensemble with brownian dynamics
         x_init, e_init, w_init, binbounds, xtrj, etrj, wtrj, transitions, hamsm_transitions, n_trans_by_round, bincenters_flat, grid \
         = weighted_ensemble(\
@@ -364,19 +375,28 @@ def weighted_ensemble_msm_analysis(system, kT, dt, aggregate_simulation_limit, n
 
 
         aggregate_walkers += len([j for i in xtrj for j in i])*nsteps
-        aggregate_walkers_t.append(aggregate_walkers)
         aggregate_transitions += transitions
 
-        x_msm, eqp_msm = MSM_methods.transitions_to_eq_probs(aggregate_transitions, bincenters_flat, show_TPM=False)
-        x_msm_t.append(x_msm)
-        eqp_msm_t.append(eqp_msm)
+        if len(aggregate_transitions) > 0:
+            x_msm, eqp_msm = MSM_methods.transitions_to_eq_probs(aggregate_transitions, bincenters_flat, show_TPM=False)
+        else:
+            print("no transitions occurred")
+            x_msm = [[0]]
+            eqp_msm = [0]
+
+        #this covers cases where transitions occurred but ergodic trimming removes them all because there were no self or back transitions or other rings
+        if len(eqp_msm) != 1 and len(eqp_msm[0]) == 1 and eqp_msm[0][0] != 0:
+            x_msm_t.append(x_msm)
+            eqp_msm_t.append(eqp_msm)
+            aggregate_walkers_t.append(aggregate_walkers)
+
 
         #print(grid.grid)
-        plt.plot(bincenters_flat, grid.grid)
-        plt.xlabel("x-coordinate")
-        plt.ylabel("metadynamics potential")
+    #     plt.plot(bincenters_flat, grid.grid)
+    #     plt.xlabel("x-coordinate")
+    #     plt.ylabel("metadynamics potential")
 
-    plt.show()
+    # plt.show()
 
     return aggregate_walkers_t, x_msm_t, eqp_msm_t, [[]]
 

@@ -53,7 +53,7 @@ def transitions_2_msm(transitions):
         last_trimmed_state_list = trimmed_state_list
 
         if i == 998:
-            print("error: trimming failed to complete within the allotted time; please inspect data")
+            print("error: ergodic trimming failed to complete within the allotted time; please inspect data")
             return 0
 
     #sort states
@@ -82,6 +82,11 @@ def transitions_2_msm(transitions):
     # which is only normally a problem when building haMSMs
     connected_states = connected_components(transition_counts, directed=True, connection='strong')[1]
     cc_inds, cc_sizes = np.unique(connected_states, return_counts=True)
+
+    if len(cc_sizes) == 0:
+        print("no connected components detected")
+        return [[1]], [0]
+
     greatest_connected_component = cc_inds[np.argmax(cc_sizes)]
         
     #remove all other components
