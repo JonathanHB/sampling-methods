@@ -9,9 +9,10 @@
 ################################################################################################################
 
 import numpy as np
-import MSM_methods
+import itertools
 import matplotlib.pyplot as plt
 
+import MSM_methods
 
 #----------------------------------------------------------------------------------------------------------------
 #compare true and estimated populations for a single estimation method
@@ -88,6 +89,182 @@ def print_mfpts_2states(mfpts, digits = 0):
 
 
 #----------------------------------------------------------------------------------------------------------------
+
+#deprecated for most purposes, use the construct_voxel_bins() and digitize_to_voxel_bins() functions instead
+# def digitize_to_voxel_bins(analysis_range, nbins, trjs):
+
+#     ndim = len(analysis_range[0])
+
+#     boxlengths = [xmax-xmin for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+#     boxcenters = [(xmax+xmin)/2 for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+
+#     binwidths = []
+#     for bl in boxlengths:
+#         binwidths.append(bl*(nbins*np.product([bl/blj for blj in boxlengths]))**(-1/ndim))
+
+#     #make bins the same size in each dimension, 
+#     # preventing anisotropies from arising from the fact that the analysis box edge lengths may not be in an integer ratio
+#     binwidth = np.mean(binwidths) 
+
+#     #calculate bin centers and boundaries
+#     binbounds = []
+#     bincenters = []
+#     nbins = []
+
+#     for d in range(ndim):
+#         nbins_d = int(np.ceil(boxlengths[d]/binwidth))
+#         nbins.append(nbins_d+2)
+
+#         rmin = boxcenters[d]-binwidth*nbins_d/2
+#         rmax = boxcenters[d]+binwidth*nbins_d/2
+
+#         binbounds.append(np.linspace(rmin, rmax, nbins_d+1))
+#         bincenters.append(np.linspace(rmin-binwidth/2, rmax+binwidth/2, nbins_d+2))
+
+#     bincenters_flat = list(itertools.product(*bincenters))
+
+#     #bin trajectories in each dimension
+#     binned_all = []
+
+#     for trj in trjs:
+
+#         binned_by_dim = []    
+#         for d in range(ndim):
+#             binned_by_dim.append(np.digitize([f[d] for f in trj], bins = binbounds[d]))
+        
+#         binned_all.append(np.array(binned_by_dim))
+
+#     #combine binning information for each dimension to place every frame into a bin with a scalar index
+#     actual_nbins = np.product(nbins)
+
+#     prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+    
+#     trjs_binned = [np.matmul(prods_higher, binned_by_dim) for binned_by_dim in binned_all]
+
+#     return trjs_binned, bincenters_flat, binwidth, actual_nbins, binbounds
+
+
+#----------------------------------------------------------------------------------------------------------------
+
+def construct_voxel_bins(analysis_range, nbins):
+
+    ndim = len(analysis_range[0])
+
+    boxlengths = [xmax-xmin for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+    boxcenters = [(xmax+xmin)/2 for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+
+    binwidths = []
+    for bl in boxlengths:
+        binwidths.append(bl*(nbins*np.product([bl/blj for blj in boxlengths]))**(-1/ndim))
+
+    #make bins the same size in each dimension, 
+    # preventing anisotropies from arising from the fact that the analysis box edge lengths may not be in an integer ratio
+    binwidth = np.mean(binwidths) 
+
+    #calculate bin centers and boundaries
+    binbounds = []
+    bincenters = []
+    nbins = []
+
+    for d in range(ndim):
+        nbins_d = int(np.ceil(boxlengths[d]/binwidth))
+        nbins.append(nbins_d+2)
+
+        rmin = boxcenters[d]-binwidth*nbins_d/2
+        rmax = boxcenters[d]+binwidth*nbins_d/2
+
+        binbounds.append(np.linspace(rmin, rmax, nbins_d+1))
+        bincenters.append(np.linspace(rmin-binwidth/2, rmax+binwidth/2, nbins_d+2))
+
+    bincenters_flat = list(itertools.product(*bincenters))
+
+    actual_nbins = np.product(nbins)
+    prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+
+    return bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher
+
+
+
+def construct_voxel_bins_2_widths(analysis_range, nbins):
+
+    ndim = len(analysis_range[0])
+
+    boxlengths = [xmax-xmin for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+    boxcenters = [(xmax+xmin)/2 for xmax, xmin in zip(analysis_range[1], analysis_range[0])]
+
+    binwidths = []
+    for bl in boxlengths:
+        binwidths.append(bl*(nbins*np.product([bl/blj for blj in boxlengths]))**(-1/ndim))
+
+    #make bins the same size in each dimension, 
+    # preventing anisotropies from arising from the fact that the analysis box edge lengths may not be in an integer ratio
+    binwidth = np.mean(binwidths) 
+
+    #calculate bin centers and boundaries
+    binbounds = []
+    bincenters = []
+    nbins = []
+
+    for d in range(ndim):
+        nbins_d1 = int(np.ceil(boxlengths[d]/binwidth)*2/3)
+        nbins_d2 = int(np.ceil(boxlengths[d]/binwidth)*1/3)
+
+        nbins.append(nbins_d1+nbins_d2+1)
+
+        rmin = boxcenters[d]-binwidth*nbins_d1*3/2
+        rmax = boxcenters[d]+binwidth*nbins_d2*3/4
+
+        binbounds.append(np.concatenate((np.linspace(rmin, 0, nbins_d1)[:-1], np.linspace(0, rmax, nbins_d2+1))))
+        bincenters.append(np.concatenate((np.linspace(rmin-binwidth/2, -binwidth*2/3, nbins_d1+1)[:-1], np.linspace(binwidth/3, rmax+binwidth/2, nbins_d2+1))))
+
+    bincenters_flat = list(itertools.product(*bincenters))
+
+    actual_nbins = np.product(nbins)
+    prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+
+    binwidths = [binbounds[0][i+1]-binbounds[0][i] for i in range(len(binbounds[0])-1)]
+    # plt.plot(bincenters[0][1:-1], binwidths)
+    # plt.show()
+
+    return bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher
+
+
+#----------------------------------------------------------------------------------------------------------------
+
+def bin_to_voxels(ndim, binbounds, prods_higher, trjs):
+
+    #bin trajectories in each dimension
+    binned_all = []
+
+    for trj in trjs:
+
+        binned_by_dim = []    
+        for d in range(ndim):
+            binned_by_dim.append(np.digitize([f[d] for f in trj], bins = binbounds[d]))
+        
+        binned_all.append(np.array(binned_by_dim))
+
+    #prods_higher = [np.product(nbins[i:]) for i in range(1,len(nbins))] + [1]
+    
+    trjs_binned = [np.matmul(prods_higher, binned_by_dim) for binned_by_dim in binned_all]
+
+    return trjs_binned
+
+
+def bin_to_voxels_timeslice(ndim, binbounds, prods_higher, trjs):
+
+    #bin trajectories in each dimension
+    #an array of shape [n_dims x n_trjs]
+    binned_trj_dim = np.array([np.digitize(trjdim, bins = binboundsdim) for trjdim, binboundsdim in zip(trjs.transpose(), binbounds)])
+
+    #bin trajectories into 1D bins
+    #an array of shape [n_trjs]
+    trjs_binned_flat = np.matmul(prods_higher, binned_trj_dim).transpose()
+
+    return trjs_binned_flat, binned_trj_dim.transpose()
+
+
+#----------------------------------------------------------------------------------------------------------------
 #construct a history augmented markov state model from a set of transitions
 
 #parameters
@@ -109,14 +286,19 @@ def print_mfpts_2states(mfpts, digits = 0):
 
 def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_TPM=False):
 
-    #for consiceness
+    #for conciseness
     nm = system.n_macrostates
 
     #get bin boundaries
-    binbounds, bincenters, step = system.analysis_bins(nbins)
+    #binbounds, bincenters, step = system.analysis_bins_1d(nbins)
+    
+    bincenters_flat, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = construct_voxel_bins(system.standard_analysis_range, nbins)
+    #trjs_discrete, bincenters, binwidth, actual_nbins, binbounds = bin_to_voxels(system.standard_analysis_range, nbins, [[]])
 
+    #print("hamsm_analysis")
+    #print(bincenters)
     #assign the bins to macrostates
-    macrostates_discrete = [system.macro_class(x) for x in bincenters]
+    macrostates_discrete = [system.macro_class(x) for x in bincenters_flat]
 
     #-----------------------------------------------------------------------------------------------------------------
     #build MSM
@@ -137,7 +319,7 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
     for i, so in enumerate(states_in_order):
         for j in range(nm):
             if so%nm == j:
-                x_ensembles[j].append(bincenters[int(so//nm)])
+                x_ensembles[j].append(bincenters_flat[int(so//nm)])
                 p_ensembles[j].append(eqp_msm[i][0])
 
 
@@ -149,13 +331,13 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
     ha_x_config = []
     ha_eqp_config = []
     
-    for i in range(0, len(bincenters)*2, 2):
+    for i in range(0, len(bincenters_flat)*2, 2):
         
         prob_all_ensembles = sum([eqp_msm[states_in_order.index(i+j)][0] if i+j in states_in_order else 0 for j in range(nm)])
         all_eqp_config.append(prob_all_ensembles)
         
         if sum([1 if i+j in states_in_order else 0 for j in range(nm)]) > 0:
-            ha_x_config.append(bincenters[int(i/2)]) # I think it's fine to just return bincenters
+            ha_x_config.append(bincenters_flat[int(i/2)]) # I think it's fine to just return bincenters
             ha_eqp_config.append(prob_all_ensembles)
 
 
@@ -164,7 +346,7 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
     mfpts = MSM_methods.calc_ha_mfpts(states_in_order, eqp_msm, tpm, macrostates_discrete, nm, save_period*lag_time)
 
 
-    return bincenters, all_eqp_config, ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
+    return bincenters_flat, all_eqp_config, ha_x_config, ha_eqp_config, x_ensembles, p_ensembles, mfpts
 
 
 #----------------------------------------------------------------------------------------------------------------
@@ -185,7 +367,7 @@ def hamsm_analysis(ha_transitions, nbins, system, save_period, lag_time=1, show_
 #returns
 # mean first passage times and populations for each method, complete with standard deviations
 
-def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins):
+def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins, n_timepoints):
     
     #should we just rely on the user to check this?
     #is there some better way to do these checks?
@@ -195,6 +377,13 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
     mfpts_all = []
     populations_all = []
 
+    #contents by index
+    #0: method
+    #1: replicate
+    #2: aggregate simulation/mean absolute error (length = 2)
+    #3: time points
+    agg_t_maew_all = []
+
     #loop over methods
     for m in analysis_methods:
         print(m)
@@ -203,14 +392,32 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
         method_coords = []
         method_probabilities = []
 
+        agg_t_maew = []
+
         #replicates for each method
         for bi in range(n_bootstrap):
-            print(f"round {bi}")
+            print(f"replicate {bi}")
 
-            aggregate_simulation, coords, probs, mfpts = m(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins)
-            method_mfpts.append(mfpts)
-            method_coords.append(coords)
-            method_probabilities.append(probs)
+            #run sampling method
+            aggregate_simulation, coords, probs, mfpts = m(system, kT, dt, aggregate_simulation_limit, n_parallel, save_period, n_analysis_bins, n_timepoints)
+            
+            #append final energy landscape estimates for display
+            method_mfpts.append(mfpts[-1])
+            method_coords.append(coords[-1])
+            method_probabilities.append(probs[-1])
+
+            #calculate mean absolute error weighted by equilibrium populations at each timepoint
+            maew = []
+            for xt, pt in zip(coords, probs):
+                bincenters_flat, system_pops, bincenters_sampled, eqp_sampled = system.energy_landscape(n_analysis_bins)
+                #system_pops = [np.exp(-system.potential(x[0])/kT) for x in xt]
+                system_pops_normalized = [sp/sum(system_pops) for sp in system_pops]
+                maew.append(np.mean([system_pops_normalized[conv_ind]*abs(p-system_pops_normalized[conv_ind]) for conv_ind, p in enumerate(pt)])) #/mean_binwidth**2
+
+            agg_t_maew.append([aggregate_simulation, maew])
+
+
+        agg_t_maew_all.append(agg_t_maew) #replace '_all' with 'bymethod' or something more informative
 
         #TODO we ought to add code to detect systematic asymmetries between forward and reverse MFPTs
         mfpts_3d = np.vstack(method_mfpts)
@@ -227,7 +434,8 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
 
         #get a list of all coordinates which appeared in any MSM
         method_coords_flat = [c for mci in method_coords for c in mci]
-        method_coords_all = np.unique(method_coords_flat)
+        method_coords_all = np.unique(method_coords_flat, axis=0)
+        print(method_coords_all)
 
         mean_probs = []
         mean_probs_err = []
@@ -237,8 +445,10 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
             probs_c = []
 
             for i, method_c in enumerate(method_coords):
-                if mc in method_c:
-                    probs_c.append(method_probabilities[i][np.where(method_c == mc)[0][0]])
+                print(mc)
+                print(method_c)
+                if tuple(mc) in method_c:
+                    probs_c.append(method_probabilities[i][np.where(method_c == tuple(mc))[0]])
             
             mean_probs.append(np.mean(probs_c))
 
@@ -251,22 +461,23 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
 
         populations_all.append([method_coords_all, mean_probs, mean_probs_err])
 
-    return mfpts_all, populations_all 
+    return mfpts_all, populations_all, agg_t_maew_all
 
 
-
-
+#TODO add legend
 def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
     
-    binbounds, bincenters, step = system.analysis_bins(n_analysis_bins)
+    bincenters, binwidth, nbins, actual_nbins, binbounds, ndim, prods_higher = construct_voxel_bins(system.standard_analysis_range, n_analysis_bins)
 
-    eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
+    #binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
+
+    eqp_analytic = [np.exp(-system.potential(x[0])/kT) for x in bincenters]
     eqp_sum = sum(eqp_analytic)
     eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
 
     plt.plot(bincenters, eqp_analytic, color="black")
 
-    colorlist = ["red", "green", "blue"]
+    colorlist = ["red", "green", "blue", "orange", "purple", "yellow"]
 
     for cx, method_data in enumerate(populations_all):
         for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
@@ -276,3 +487,56 @@ def plot_bootstrapping_results(populations_all, system, kT, n_analysis_bins):
             else:
                 plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
 
+    plt.xlabel("x-coordinate")
+    plt.ylabel("probability density")
+
+
+#plot convergence of the mean absolute error over time for each replicate of each method
+def plot_convergence(agg_t_maew_all):
+    
+    colorlist = ["red", "green", "blue", "orange", "purple", "yellow"]
+
+    for mi, method_data in enumerate(agg_t_maew_all):
+        for replicate in method_data:
+            plt.plot(replicate[0], replicate[1], color=colorlist[mi])
+    
+    plt.yscale("log")
+    plt.xlabel("aggregate simulation steps")
+    plt.ylabel("weighted mean absolute error\n(population^2/bin or something)")
+
+
+# def plot_bootstrapping_results_nd(populations_all, system, kT, n_analysis_bins):
+    
+#     binbounds, bincenters, step = system.analysis_bins_1d(n_analysis_bins)
+
+#     eqp_analytic = [np.exp(-system.potential(x)/kT) for x in bincenters]
+#     eqp_sum = sum(eqp_analytic)
+#     eqp_analytic = [ea/eqp_sum for ea in eqp_analytic]
+
+#     plt.plot(bincenters, eqp_analytic, color="black")
+
+#     colorlist = ["red", "green", "blue"]
+
+#     for cx, method_data in enumerate(populations_all):
+#         for mci, mpi, mpei in zip(method_data[0], method_data[1], method_data[2]):
+            
+#             if mpei == -1:
+#                 plt.scatter(mci, mpi, color=colorlist[cx], marker=".")
+#             else:
+#                 plt.errorbar(mci, mpi, mpei, color=colorlist[cx], marker="_")
+
+
+
+def plot_synth_landscape(sys, x_sampled, est_pops):
+
+    plt.figure(figsize=(10, 10))
+
+    vma = max(sys.p+est_pops)
+
+    #for tc, ep in zip(trj_coords, est_pops):
+    plt.scatter(x_sampled[:,0], x_sampled[:,1], c=est_pops, cmap='viridis', vmin=0, vmax=vma, s=100)
+    plt.scatter(x_sampled[:,0], x_sampled[:,1], c="white", s=50)
+    plt.scatter(sys.x[:,0], sys.x[:,1], c=sys.p, cmap='viridis', vmin=0, vmax=vma, s=20)
+
+    plt.axis("equal")
+    plt.show()

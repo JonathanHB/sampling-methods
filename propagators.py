@@ -39,6 +39,33 @@ def propagate(system, kT, trj_coords, timestep, nsteps, save_period):
     return trj_out
 
 
+#nsteps must be an integer multiple of save_period
+def propagate_mtd(system, kT, trj_coords, timestep, nsteps, save_period, grid):
+  
+    nd = np.array(trj_coords.shape)   #this includes both the number of trajectories and the number of dimensions
+    D = system.diffusion_coefficient
+    
+    grid_rates = [grid.rate for i in trj_coords]
+
+    trj_out = []
+    w_out = []
+    
+    for i in range(nsteps//save_period):
+    
+        for step in range(save_period):
+            trj_coords += D/kT * (system.F(trj_coords) + grid.compute_forces(trj_coords)) * timestep + np.sqrt(2*D*timestep)*np.random.normal(size=nd)
+        
+        trj_out.append(trj_coords.copy())
+        w_out.append(grid.weights(trj_coords, kT))
+        
+        grid.update(trj_coords, grid_rates)
+        #grid.compute_forces(trj_coords)
+
+    #print(trj_out[1].shape)
+    return trj_out, w_out, grid
+
+
+
 #same as propagate() but outputs only the last frame; 
 #  avoids an extra layer of for loops when running WE
 def propagate_save1(system, kT, trj_coords, timestep, nsteps):
@@ -55,10 +82,12 @@ def propagate_save1(system, kT, trj_coords, timestep, nsteps):
 #TODO make a propagator version that actually uses kT for testing replica exchange schemes
 def propagate_msm(system_dtmsm, kT, trj_coords, timestep, nsteps, save_period):
 
+    tia = []
     tca = []
 
     for tci in trj_coords:
         dt_trj = system_dtmsm.dtmsm.simulate(nsteps, start = tci, dt = save_period) #, seed=0
-        tca.append(np.array([system_dtmsm.x[dti] for dti in dt_trj]))
+        tia.append(dt_trj)
+        tca.append(np.stack([system_dtmsm.x[dti] for dti in dt_trj]))
 
-    return np.array(tca).transpose() #, dt_trj
+    return np.stack(tca, axis=0), np.stack(tia, axis=0)
