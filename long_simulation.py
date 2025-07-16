@@ -63,9 +63,27 @@ def resume_parallel_simulations(propagator, system, kT, dt, nsteps, save_period,
     long_trjs = np.array(propagator(system, kT, x_init, dt, nsteps, save_period)).transpose(1,0,2)
 
     #include the starting frame
-    #'1' here is not a magic number; it instead reflects the fact that the starting coordinate is a single frame long
+    # ? --> '1' here is not a magic number; it instead reflects the fact that the starting coordinate is a single frame long
     return np.concatenate((prev_trj, long_trjs), axis=1) 
 
+
+def resume_parallel_simulations_msm(propagator, system, kT, dt, nsteps, save_period, prev_trj, prev_inds):
+
+    #x_init is modified by being fed in to the propagator
+    #x_init = np.array([xii[-1] for xii in prev_trj])
+    
+    #propagate
+    long_trjs, long_trj_inds = propagator(system, kT, prev_inds[:,-1], dt, nsteps, save_period)
+
+    # print(prev_trj.shape)
+    # print(prev_inds.shape)
+    # print(long_trjs.shape)
+    # print(long_trj_inds.shape)
+
+    #extend the existing trajectory
+    return np.concatenate((prev_trj, long_trjs), axis=1), np.concatenate((prev_inds, long_trj_inds), axis=1) 
+
+    
 
 def resume_parallel_simulations_mtd(propagator, system, kT, dt, nsteps, save_period, prev_trj, prev_weights, grid):
 
@@ -80,6 +98,8 @@ def resume_parallel_simulations_mtd(propagator, system, kT, dt, nsteps, save_per
     #include the starting frame
     #'1' here is not a magic number; it instead reflects the fact that the starting coordinate is a single frame long
     return np.concatenate((prev_trj, long_trjs), axis=1), np.concatenate((prev_weights, trj_weights), axis=1), grid
+
+
 #---------------------------------------------------------------------------------
 #estimate the equilibrium populations from a set of parallel trajectories by counting up where the system spends its time
 # parameters:
@@ -116,7 +136,7 @@ def estimate_eq_pops_histogram(trjs, system, nbins, weights=[]):
             eq_pops[b] += w/wt
 
 
-    #account for the fact that 
+    #account for the fact that not all bins have necessarily been sampled
     bins_sampled = np.sort(np.unique(binned_trj))
     bincenters_sampled = [bincenters_flat[i] for i in bins_sampled]
     eqp_sampled = [eq_pops[i] for i in bins_sampled]
@@ -333,21 +353,27 @@ def long_simulation_histogram_analysis(system, kT, dt, aggregate_simulation_limi
     n_parallel = int(round(aggregate_simulation_limit/molecular_time_limit))
     nsteps = int(round(aggregate_simulation_limit/(n_parallel*n_timepoints)))
 
-    #set initial positions
-    if system.start_from_index:
-        sim_init_coord = system.standard_init_index
-    else:
-        sim_init_coord = system.standard_init_coord
+    # #set initial positions
+    # if system.start_from_index:
+    #     sim_init_coord = system.standard_init_index
+    # else:
+    #     sim_init_coord = system.standard_init_coord
 
-    long_trjs = np.array([sim_init_coord for element in range(n_parallel)]).reshape((n_parallel, 1, len(system.standard_init_coord)))
+    long_trjs = np.array([system.standard_init_coord for element in range(n_parallel)]).reshape((n_parallel, 1, len(system.standard_init_coord)))
+    long_trj_inds = np.array([system.standard_init_index for element in range(n_parallel)]).reshape((n_parallel, 1))
 
     agg_times = []
     xs_t = []
     ps_t = []
     mfpts_t = []
 
+    print(str(nsteps) + " steps")
+    print(str(n_parallel) + " parallel simulations")
+
     for tp in range(n_timepoints):
-        long_trjs = resume_parallel_simulations(propagators.propagate, system, kT, dt, nsteps, save_period, long_trjs)
+        # print(long_trj_inds)
+        # print(n_parallel)
+        long_trjs, long_trj_inds = resume_parallel_simulations_msm(propagators.propagate_msm, system, kT, dt, nsteps, save_period, long_trjs, long_trj_inds)
 
         #analysis
         x, p, xs, ps = estimate_eq_pops_histogram(long_trjs, system, n_analysis_bins)

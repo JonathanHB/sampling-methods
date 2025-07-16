@@ -409,9 +409,10 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
             #calculate mean absolute error weighted by equilibrium populations at each timepoint
             maew = []
             for xt, pt in zip(coords, probs):
-                system_pops = [np.exp(-system.potential(x[0])/kT) for x in xt]
+                bincenters_flat, system_pops, bincenters_sampled, eqp_sampled = system.energy_landscape(n_analysis_bins)
+                #system_pops = [np.exp(-system.potential(x[0])/kT) for x in xt]
                 system_pops_normalized = [sp/sum(system_pops) for sp in system_pops]
-                maew.append(np.mean([system_pops_normalized[conv_ind]*abs(p-system_pops_normalized[conv_ind]) for conv_ind, p in enumerate(pt)]))#/mean_binwidth**2
+                maew.append(np.mean([system_pops_normalized[conv_ind]*abs(p-system_pops_normalized[conv_ind]) for conv_ind, p in enumerate(pt)])) #/mean_binwidth**2
 
             agg_t_maew.append([aggregate_simulation, maew])
 
@@ -433,7 +434,8 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
 
         #get a list of all coordinates which appeared in any MSM
         method_coords_flat = [c for mci in method_coords for c in mci]
-        method_coords_all = np.unique(method_coords_flat)
+        method_coords_all = np.unique(method_coords_flat, axis=0)
+        print(method_coords_all)
 
         mean_probs = []
         mean_probs_err = []
@@ -443,8 +445,10 @@ def bootstrap_method_comparison(n_bootstrap, analysis_methods, system, kT, dt, a
             probs_c = []
 
             for i, method_c in enumerate(method_coords):
-                if mc in method_c:
-                    probs_c.append(method_probabilities[i][np.where(method_c == mc)[0][0]])
+                print(mc)
+                print(method_c)
+                if tuple(mc) in method_c:
+                    probs_c.append(method_probabilities[i][np.where(method_c == tuple(mc))[0]])
             
             mean_probs.append(np.mean(probs_c))
 

@@ -1,5 +1,6 @@
 import numpy as np
 import deeptime
+import long_simulation
 
 
 
@@ -117,8 +118,23 @@ class two_wells_decoy_valley():
         self.dtmsm = synthetic_msm(self.x, self.e, self.min_spacing, self.kT)
 
         self.start_from_index = True
-        self.standard_init_ind = np.argmin(self.e)
-        self.standard_init_coord = self.x[self.standard_init_ind]
+        self.standard_init_index = np.argmin(self.e) #start from the lowest energy state as if starting from a crystal structure
+        self.standard_init_coord = self.x[self.standard_init_index]
         self.standard_analysis_range = [self.box_min, self.box_max]
+
+        self.n_macrostates = 2
+
+
+    def energy_landscape(self, nbins):
+        return long_simulation.estimate_eq_pops_histogram([self.x], self, nbins, weights = self.p)
+
+
+    def macro_class(self, x):
+        if x[0] < 1.5:
+            return 0
+        elif x[0] > 6.5:
+            return 1
+        else:
+            return -1
 
 
