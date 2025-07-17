@@ -90,4 +90,4 @@ def propagate_msm(system_dtmsm, kT, trj_coords, timestep, nsteps, save_period):
         tia.append(dt_trj)
         tca.append(np.stack([system_dtmsm.x[dti] for dti in dt_trj]))
 
-    return np.stack(tca, axis=0), np.stack(tia, axis=0)
+    return np.stack(tia, axis=0), np.stack(tca, axis=0)
